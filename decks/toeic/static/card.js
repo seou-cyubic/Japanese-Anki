@@ -106,6 +106,51 @@
     };
   }
 
+  /* 예문 켜고 끄기 — **카드 안의 스위치 하나가 모든 카드에 걸린다.**
+   *
+   * Anki 는 카드를 넘길 때마다 이 스크립트를 **처음부터 다시 돌린다.**  그래서 '지금
+   * 예문을 보는가' 는 스크립트 바깥에 남겨야 다음 카드가 이어받는다.  필기판이 앞면의
+   * 획을 뒷면으로 넘기는 것과 같은 방법이다(한자 덱의 `keepStrokes`).
+   *
+   * 칸은 하나뿐이고 값은 `on`/`off` 뿐이다 — 카드마다 다른 설정을 두지 않는다.
+   * 그래야 '전역 스위치' 라는 말이 성립한다.
+   *
+   * 저장소는 **사다리**다.
+   *   localStorage    앱을 닫았다 열어도 남는다
+   *   sessionStorage  이번 실행 동안 남는다
+   *   window          이 화면 동안만 남는다
+   * 웹뷰에 따라 위쪽 칸이 막혀 있을 수 있으므로(사생활 모드, 오리진이 매번 바뀌는
+   * 경우) 되는 데까지 내려간다.  전부 막혀도 카드는 그대로 그려지고, 스위치는 그
+   * 카드 안에서만 듣는다. */
+  const SWITCH = 'sp-toeic-examples';
+
+  const stores = () => {
+    const found = [];
+    for (const name of ['localStorage', 'sessionStorage']) {
+      try { if (window[name]) found.push(window[name]); } catch (error) { /* 막혀 있다 */ }
+    }
+    return found;
+  };
+
+  /* 지금 예문을 보여 주는가.  저장된 것이 없으면 덱이 정한 기본값을 따른다. */
+  function examplesShown(options) {
+    for (const store of stores()) {
+      try {
+        const kept = store.getItem(SWITCH);
+        if (kept === 'on' || kept === 'off') return kept === 'on';
+      } catch (error) { /* 다음 칸으로 */ }
+    }
+    if (typeof window.__toeicExamples === 'boolean') return window.__toeicExamples;
+    return options.examples !== false;
+  }
+
+  function keepExamples(shown) {
+    window.__toeicExamples = shown;      /* 저장소가 전부 막혀도 이 화면에서는 듣는다 */
+    for (const store of stores()) {
+      try { store.setItem(SWITCH, shown ? 'on' : 'off'); } catch (error) { /* 다음 칸 */ }
+    }
+  }
+
   /* 뜻 한 줄.
    *
    * 왼쪽은 **외울 것**이고 오른쪽은 **뜻풀이**다.  일본어 낱말 아래에 예문 두 줄이
@@ -156,7 +201,27 @@
 
   function render(note, options = {}) {
     const mode = options.mode || 'reading-front';
-    const card = node('article', `toeic-card preview-card ${mode}`);
+    const base = `toeic-card preview-card ${mode}`;
+    const card = node('article', base);
+
+    /* 예문을 보는지는 **클래스 하나로** 드러낸다.  무엇을 가릴지는 여기서 정하지
+     * 않고 card.css 가 그 클래스로 정한다 — 앞뒤 모드와 같은 방법이다. */
+    let shown = examplesShown(options);
+    const toggle = node('button', 'tc-switch');
+    toggle.setAttribute('type', 'button');
+    const paint = () => {
+      card.className = `${base} ${shown ? 'examples-on' : 'examples-off'}`;
+      toggle.textContent = shown ? '예문 ON' : '예문 OFF';
+      toggle.setAttribute('aria-pressed', shown ? 'true' : 'false');
+    };
+    toggle.onclick = (event) => {
+      /* 카드를 누르면 뒤집히는 화면이 있다.  스위치는 그 클릭이 아니다. */
+      if (event && event.stopPropagation) event.stopPropagation();
+      shown = !shown;
+      keepExamples(shown);
+      paint();
+    };
+    paint();
 
     const head = node('header', 'tc-head');
     const title = node('div', 'tc-title');
@@ -165,6 +230,7 @@
     head.append(title);
 
     const side = node('div', 'tc-side');
+    side.append(toggle);
     /* 어족은 표제어를 빼고 보여 준다 — 표제어는 이미 위에 크게 있다. */
     const forms = (note.family || []).filter((form) => form.toLowerCase() !== note.word);
     if (forms.length) side.append(node('div', 'tc-family', forms.join(' · ')));
@@ -189,6 +255,9 @@
     render,
     noteFrom,
     plainSurface,
+    examplesShown,
+    keepExamples,
+    SWITCH,
     POS_ORDER,
     POS_LABELS
   };

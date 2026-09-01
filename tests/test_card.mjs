@@ -904,6 +904,85 @@ for (const mode of ['reading-front', 'reading-back', 'spell-front', 'spell-back'
   }
 }
 
+/* --------------------------------------------------------------------------
+ * 예문 스위치 — **카드 하나에서 누르면 모든 카드에 걸린다.**
+ *
+ * Anki 는 카드를 넘길 때마다 렌더러를 처음부터 다시 돌리므로, 고른 값은 스크립트
+ * 바깥(저장소)에 남아야 다음 카드가 이어받는다.  여기서 그 왕복을 실제로 해 본다 —
+ * 한 카드에서 끄고, **렌더러를 다시 돌려** 다음 카드를 그리고, 꺼진 채로 나오는지.
+ * -------------------------------------------------------------------------- */
+
+const fakeStore = () => {
+  const slots = new Map();
+  return {
+    getItem: (key) => (slots.has(key) ? slots.get(key) : null),
+    setItem: (key, value) => slots.set(key, String(value))
+  };
+};
+globalThis.window.localStorage = fakeStore();
+delete globalThis.window.__toeicExamples;
+
+const switchOf = (card) => descendants(card, 'tc-switch')[0];
+const classesOf = (card) => card.className.split(/\s+/);
+
+/* 기본값은 덱이 정한다 — 저장된 것이 없을 때만 쓰인다. */
+const byDefault = window.ToeicCard.render(toeicNote, { mode: 'reading-back' });
+if (!classesOf(byDefault).includes('examples-on')) {
+  throw new Error('with nothing stored the card must follow the deck default');
+}
+if (!switchOf(byDefault)) throw new Error('every card must carry the switch');
+if (window.ToeicCard.render(toeicNote, { examples: false })
+  .className.split(/\s+/).includes('examples-on')) {
+  throw new Error('examples:false must be the default when nothing is stored');
+}
+
+/* 한 카드에서 끈다. */
+switchOf(byDefault).onclick({ stopPropagation() {} });
+if (!classesOf(byDefault).includes('examples-off')) {
+  throw new Error('pressing the switch must turn this card off at once');
+}
+if (switchOf(byDefault).textContent !== '예문 OFF') {
+  throw new Error('the switch must say what it is now');
+}
+
+/* **다음 카드** — 렌더러를 다시 돌려도 꺼진 채로 나와야 한다.  두 방향 모두. */
+for (const mode of ['reading-front', 'reading-back', 'spell-front', 'spell-back']) {
+  const next = window.ToeicCard.render(toeicNote, { mode });
+  if (!classesOf(next).includes('examples-off')) {
+    throw new Error(`the switch must carry over to the next card: ${mode}`);
+  }
+  if (descendants(next, 'tc-example').length !== 2) {
+    throw new Error('the DOM must stay identical — CSS does the hiding');
+  }
+}
+
+/* 다시 켜면 되돌아온다. */
+const off = window.ToeicCard.render(toeicNote, { mode: 'spell-back' });
+switchOf(off).onclick({ stopPropagation() {} });
+if (!classesOf(window.ToeicCard.render(toeicNote, {})).includes('examples-on')) {
+  throw new Error('turning the switch back on must carry over too');
+}
+
+/* 저장소가 막혀 있어도 카드는 그려지고, 그 화면 안에서는 스위치가 듣는다. */
+const blocked = {
+  getItem() { throw new Error('blocked'); },
+  setItem() { throw new Error('blocked'); }
+};
+globalThis.window.localStorage = blocked;
+globalThis.window.sessionStorage = blocked;
+delete globalThis.window.__toeicExamples;
+const noStore = window.ToeicCard.render(toeicNote, { mode: 'reading-back' });
+if (!classesOf(noStore).includes('examples-on')) {
+  throw new Error('a blocked store must fall back to the deck default, not crash');
+}
+switchOf(noStore).onclick({ stopPropagation() {} });
+if (!classesOf(window.ToeicCard.render(toeicNote, {})).includes('examples-off')) {
+  throw new Error('with no store the switch must still hold for this page');
+}
+delete globalThis.window.localStorage;
+delete globalThis.window.sessionStorage;
+delete globalThis.window.__toeicExamples;
+
 /* 뜻이 없는 낱말도 카드가 되기는 해야 한다.  빈 화면 대신 그렇다고 말한다. */
 const barren = window.ToeicCard.render(
   window.ToeicCard.noteFrom({ key: 'x', record: { senses: [] } }), {});
@@ -911,6 +990,7 @@ if (descendants(barren, 'tc-empty').length !== 1) {
   throw new Error('a word with no sense must say so rather than draw nothing');
 }
 
+process.stdout.write('toeic switch: one press carries to the next card, both directions\n');
 process.stdout.write(`toeic card: ${toeicNote.senses.length} senses on one card, `
   + `example in the main column, glosses in the aside, modes OK\n`);
 

@@ -204,6 +204,32 @@
 .toeic-card.spell-front .tc-en,
 .toeic-card.spell-front .tc-ex-en { visibility: hidden; }
 
+/* 예문 스위치.  카드마다 있고 누르면 **모든 카드**에 걸린다(card.js 의 `SWITCH`).
+ *
+ * **여기서는 `display: none` 이 맞다.**  위의 앞뒤 가림은 *답*을 감추는 것이라 칸을
+ * 남겨야 뒤집을 때 글이 튀지 않지만, 이것은 사람이 **안 보겠다고 고른 것**이다.
+ * 고르고 나서도 빈 자리가 남아 있으면 고른 대로 되지 않은 것이다. */
+.toeic-card.examples-off .tc-example { display: none; }
+
+.tc-switch {
+  align-self: flex-end;
+  margin-top: 2px;
+  border: 1px solid oklch(0.86 0.004 85);
+  border-radius: 999px;
+  padding: 2px 9px;
+  background: #fff;
+  color: var(--ink-4);
+  cursor: pointer;
+  font-family: var(--kr);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+}
+
+.toeic-card.examples-on .tc-switch {
+  border-color: oklch(0.82 0.06 250);
+  color: oklch(0.48 0.09 250);
+}
+
 @media (max-width: 1050px) {
   .toeic-card { padding: 32px 26px 28px; }
   .tc-en-word { font-size: 32px; }

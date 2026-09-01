@@ -199,6 +199,34 @@ class NoteTypeTest(unittest.TestCase):
         self.assertIn("flex-wrap: wrap", rules[".example-spell"])
         self.assertIn("flex-wrap: wrap", rules[".word"])
 
+    def test_the_toeic_switch_removes_the_example_rather_than_blanking_it(self) -> None:
+        """예문 스위치는 **자리까지 걷어낸다.**
+
+        앞뒤 가림은 *답*을 감추는 것이라 칸을 남겨야 뒤집을 때 글이 튀지 않지만,
+        스위치는 사람이 **안 보겠다고 고른 것**이다.  고르고도 빈 자리가 남아 있으면
+        고른 대로 되지 않은 것이다.
+        """
+        body = re.sub(r"/\*.*?\*/", "",
+                      (FOUND["toeic"].static_dir / "card.css").read_text(encoding="utf-8"),
+                      flags=re.S)
+        rules = {selector.strip(): declarations
+                 for selector, _, declarations in
+                 (rule.partition("{") for rule in body.split("}"))}
+        rule = rules.get(".toeic-card.examples-off .tc-example")
+        self.assertIsNotNone(rule, "스위치를 끈 카드에서 예문을 걷어내는 규칙이 없다")
+        self.assertIn("display: none", rule)
+
+    def test_the_toeic_deck_declares_a_default_for_the_switch(self) -> None:
+        """저장소가 막힌 웹뷰에서도 보이는 모습은 정해져 있어야 한다.
+
+        스위치가 고른 값이 없으면 노트 타입에 실린 이 기본값이 쓰인다.
+        """
+        from decks.toeic.deck import NOTE_TYPE
+        for template in NOTE_TYPE.templates:
+            for face in (template.front, template.back):
+                with self.subTest(card=template.name):
+                    self.assertRegex(face, r'"examples":\s*(true|false)')
+
     def test_the_data_field_is_required(self) -> None:
         with self.assertRaises(ValueError):
             build_note_type(name="X", fields=["Key"],

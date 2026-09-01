@@ -109,7 +109,10 @@ NOTE_TYPE = build_note_type(
     renderer=RENDERER,
     cards=CARDS,
     # 검증 등급 뱃지는 편집기의 진단이다.  학습 카드에는 띄우지 않는다.
-    options={"diagnostics": False},
+    # ``examples`` 는 **기본값일 뿐이다.**  카드 안의 스위치가 고른 것이 있으면
+    # 그것이 이긴다(card.js 의 ``examplesShown``).  저장소가 막힌 웹뷰에서도 덱이
+    # 정한 이 값으로 시작하므로, 스위치가 안 먹더라도 보이는 모습은 정해져 있다.
+    options={"diagnostics": False, "examples": True},
 )
 
 
