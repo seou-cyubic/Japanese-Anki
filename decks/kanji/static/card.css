@@ -1,0 +1,590 @@
+:root {
+  /* 공용 토큰은 app/static/tokens.css 에 있다.  여기에는 한자 덱 고유의 치수만 둔다. */
+  /* 용례 한자 한 칸의 크기.  후리가나 배율은 전부 이 값에서 파생된다. */
+  --example-kanji: 23px;
+}
+
+.kanji-card {
+  width: 880px;
+  max-width: 100%;
+  margin: 0 auto;
+  padding: 60px 64px 56px;
+  border: 1px solid oklch(0.9 0.004 85);
+  border-radius: 4px;
+  background: #fff;
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.03),
+    0 14px 36px -20px rgba(0, 0, 0, 0.18);
+}
+
+.preview-card {
+  cursor: pointer;
+  user-select: none;
+}
+
+.preview-card:focus-visible {
+  outline: 2px solid oklch(0.72 0.09 248);
+  outline-offset: 4px;
+}
+
+/* 한자 원문 옆에 작은 글씨 두 줄이 붙는다.
+ *   ★★ ☆☆☆☆   위: 한국어 음훈
+ *   ★★ ○○○○   아래: 이체자                */
+.kc-head {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding-bottom: 34px;
+  border-bottom: 1px solid oklch(0.93 0.004 85);
+}
+
+.kc-character {
+  flex: 0 0 auto;
+  color: oklch(0.22 0.004 85);
+  font-family: var(--jp);
+  font-size: 104px;
+  font-weight: 400;
+  letter-spacing: 0.02em;
+  line-height: 0.9;
+}
+
+.kc-side {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  justify-content: center;
+  gap: 7px;
+}
+
+.kc-korean {
+  min-width: 0;
+  color: oklch(0.34 0.004 85);
+  font-family: var(--kr);
+  font-size: 16px;
+  letter-spacing: 0.01em;
+}
+
+.kc-variants {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.kc-variant {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  color: oklch(0.34 0.004 85);
+  font-family: var(--jp);
+  font-size: 16px;
+}
+
+.kc-variant.none { color: var(--ink-4); font-family: var(--kr); font-size: 12px; }
+
+.kc-variant-label {
+  color: var(--ink-4);
+  font-family: var(--kr);
+  font-size: 11px;
+}
+
+/* 가리기 규칙은 **반드시 .kanji-card 안쪽으로 한정한다.**  편집기는 덱을 오갈 때
+ * 두 덱의 card.css 를 모두 싣고 지우지 않으므로, 한정하지 않으면 이 규칙이 문법
+ * 카드까지 가린다.  Anki 는 한 덱의 CSS 만 실으니 그쪽에서는 가려지지 않아,
+ * **화면과 Anki 가 다르게 보이는 원인**이 된다. */
+.kanji-card .reveal-korean,
+.kanji-card .reveal-reading,
+.kanji-card .reveal-furigana,
+.kanji-card .reveal-meaning { transition: var(--reveal-ease); }
+
+.kanji-card.reading-front .reveal-korean,
+.kanji-card.reading-front .reveal-reading,
+.kanji-card.reading-front .reveal-furigana,
+.kanji-card.reading-front .reveal-meaning { opacity: 0; }
+
+/* 쓰기 덱 앞면은 정답 한자를 '　' 로 바꾼 것과 같은 상태로 둔다.  글자만 감추고
+ * 칸은 그대로 두므로 배치가 흔들리지 않고, 뒤집기는 클래스 토글로 끝난다. */
+.kanji-card .answer-char { transition: var(--reveal-ease); }
+.kanji-card.writing-front .answer-char { visibility: hidden; }
+
+/* 한자 원문 섹션의 오른쪽 끝.  마우스로 한자를 직접 써 보는 자리다. */
+.writing-pad {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.writing-canvas {
+  width: 132px;
+  height: 132px;
+  border: 1px dashed oklch(0.82 0.004 85);
+  border-radius: 6px;
+  background: oklch(0.99 0.002 85);
+  cursor: crosshair;
+  touch-action: none;
+}
+
+.writing-clear {
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: transparent;
+  color: var(--ink-4);
+  cursor: pointer;
+  font-family: var(--kr);
+  font-size: 11px;
+  padding: 3px 9px;
+}
+
+.writing-clear:hover { color: var(--ink-2); }
+
+/* X 마커 한 줄에 모든 예외가 모이므로 다른 요미카타보다 길어질 수 있다. */
+.kc-reading.group-exc .reading-label { font-family: var(--jp); }
+
+.kc-readings {
+  display: flex;
+  flex-direction: column;
+  gap: 44px;
+  padding-top: 40px;
+}
+
+.kc-reading-group {
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+}
+
+.kc-reading-row {
+  display: flex;
+  gap: 44px;
+}
+
+.kc-reading {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 0;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.reading-filler { visibility: hidden; }
+
+/* Exact design_sample base hues. The three visible shade steps repeat for
+ * production groups longer than the sample's maximum of three. */
+.group-on {
+  --marker-color: oklch(0.620 0.115 82);
+  --group: var(--marker-color);
+}
+.group-on.tone-1 { --marker-color: oklch(0.705 0.071 82); }
+.group-on.tone-2 { --marker-color: oklch(0.790 0.044 82); }
+
+.group-kun {
+  --marker-color: oklch(0.560 0.085 152);
+  --group: var(--marker-color);
+}
+.group-kun.tone-1 { --marker-color: oklch(0.645 0.053 152); }
+.group-kun.tone-2 { --marker-color: oklch(0.730 0.033 152); }
+
+.group-verb {
+  --marker-color: oklch(0.540 0.095 248);
+  --group: var(--marker-color);
+}
+.group-verb.tone-1 { --marker-color: oklch(0.625 0.059 248); }
+.group-verb.tone-2 { --marker-color: oklch(0.710 0.037 248); }
+
+.group-exc {
+  --marker-color: oklch(0.540 0.125 26);
+  --group: var(--marker-color);
+}
+.group-exc.tone-1 { --marker-color: oklch(0.625 0.077 26); }
+.group-exc.tone-2 { --marker-color: oklch(0.710 0.048 26); }
+
+.group-invalid {
+  --marker-color: var(--bad);
+  --group: var(--marker-color);
+}
+
+.kc-reading-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.reading-dot {
+  width: 14px;
+  flex: 0 0 14px;
+  color: var(--marker-color);
+  font-family: var(--jp);
+  font-size: 10px;
+  line-height: 1;
+  text-align: center;
+}
+
+.reading-label,
+.reading-name {
+  min-width: 0;
+  color: oklch(0.3 0.004 85);
+  font-family: var(--jp);
+  font-size: 30px;
+  font-weight: 400;
+  letter-spacing: 0.06em;
+  line-height: 1.1;
+}
+
+.reading-body {
+  display: flex;
+  min-width: 0;
+  gap: 20px;
+}
+
+.reading-line-wrap {
+  width: 14px;
+  flex: 0 0 14px;
+  display: flex;
+  justify-content: center;
+}
+
+.reading-line {
+  width: 2px;
+  align-self: stretch;
+  border-radius: 2px;
+  background: var(--marker-color);
+  opacity: 0.9;
+}
+
+.words {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 14px;
+}
+
+/* 뜻은 후리가나 줄이 아니라 한자 줄과 수평으로 놓인다.  spell 상자의 마지막
+ * 베이스라인(= 한자 줄)에 맞추면 후리가나 유무와 무관하게 정렬이 유지된다. */
+/* 용례 한 줄 — 왼쪽에 일본어 표기, 오른쪽에 한국어 뜻.
+ *
+ * **`min-width: 0` 을 두지 않는다.**  플렉스 항목의 기본값 `min-width: auto` 가
+ * '내용보다 좁아지지 않는다' 는 보호막인데, `0` 으로 덮으면 그 보호막이 사라진다.
+ * 그러면 자리가 모자랄 때 표기 칸이 글자 폭 아래로 눌리고, 안쪽 글자는
+ * `white-space: nowrap` 이라 줄지 않으므로 **칸 밖으로 흘러 옆 글자와 겹친다** —
+ * `書き下ろす` 가 `書き` 와 `下` 를 붙여 찍던 것이 이것이다.
+ *
+ * 자리가 모자라면 눌리는 대신 **줄을 바꾼다.**  용례 칸은 칸 경계에서, 줄 전체는
+ * 뜻을 아래로 내려서 접는다.  글자가 겹치는 것보다 한 줄 늘어나는 편이 언제나 낫다. */
+.word {
+  position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: last baseline;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.example-spell {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  align-content: flex-end;
+  white-space: nowrap;
+}
+
+/* 한자 한 칸(들)과 그 위에 얹히는 후리가나가 이루는 단위.
+ * 후리가나가 걸리는 단위라 이 안에서는 줄을 바꿀 수 없다 — 줄바꿈은 칸 사이에서만
+ * 일어난다(`.example-spell`). */
+.fseg {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.fseg-furi {
+  min-height: 15px;
+  color: oklch(0.62 0.004 85);
+  font-family: var(--jp);
+  /* 기본값: 한자 한 칸에 후리가나 두 자. */
+  font-size: calc(var(--example-kanji) * 0.5);
+  letter-spacing: 0.03em;
+  line-height: 1.25;
+  white-space: nowrap;
+}
+
+.fseg-word {
+  color: oklch(0.26 0.004 85);
+  font-family: var(--jp);
+  font-size: var(--example-kanji);
+  font-weight: 400;
+  letter-spacing: 0.03em;
+  line-height: 1.25;
+  white-space: nowrap;
+}
+
+/* 후리가나가 한자 칸보다 많을 때 정확히 들어맞도록 줄이는 배율.
+ * CSP 가 인라인 스타일을 막으므로 클래스로 낸다.  fr-{한자수}-{후리가나수}. */
+.fr-1-3 .fseg-furi { font-size: calc(var(--example-kanji) * 1 / 3); }
+.fr-1-4 .fseg-furi { font-size: calc(var(--example-kanji) * 1 / 4); }
+.fr-1-5 .fseg-furi { font-size: calc(var(--example-kanji) * 1 / 5); }
+.fr-1-6 .fseg-furi { font-size: calc(var(--example-kanji) * 1 / 6); }
+.fr-1-7 .fseg-furi { font-size: calc(var(--example-kanji) * 1 / 7); }
+.fr-1-8 .fseg-furi { font-size: calc(var(--example-kanji) * 1 / 8); }
+.fr-1-9 .fseg-furi { font-size: calc(var(--example-kanji) * 1 / 9); }
+.fr-1-10 .fseg-furi { font-size: calc(var(--example-kanji) * 1 / 10); }
+.fr-1-11 .fseg-furi { font-size: calc(var(--example-kanji) * 1 / 11); }
+.fr-1-12 .fseg-furi { font-size: calc(var(--example-kanji) * 1 / 12); }
+.fr-1-13 .fseg-furi { font-size: calc(var(--example-kanji) * 1 / 13); }
+.fr-1-14 .fseg-furi { font-size: calc(var(--example-kanji) * 1 / 14); }
+.fr-1-15 .fseg-furi { font-size: calc(var(--example-kanji) * 1 / 15); }
+.fr-1-16 .fseg-furi { font-size: calc(var(--example-kanji) * 1 / 16); }
+.fr-1-17 .fseg-furi { font-size: calc(var(--example-kanji) * 1 / 17); }
+.fr-1-18 .fseg-furi { font-size: calc(var(--example-kanji) * 1 / 18); }
+.fr-1-19 .fseg-furi { font-size: calc(var(--example-kanji) * 1 / 19); }
+.fr-1-20 .fseg-furi { font-size: calc(var(--example-kanji) * 1 / 20); }
+.fr-2-5 .fseg-furi { font-size: calc(var(--example-kanji) * 2 / 5); }
+.fr-2-6 .fseg-furi { font-size: calc(var(--example-kanji) * 2 / 6); }
+.fr-2-7 .fseg-furi { font-size: calc(var(--example-kanji) * 2 / 7); }
+.fr-2-8 .fseg-furi { font-size: calc(var(--example-kanji) * 2 / 8); }
+.fr-2-9 .fseg-furi { font-size: calc(var(--example-kanji) * 2 / 9); }
+.fr-2-10 .fseg-furi { font-size: calc(var(--example-kanji) * 2 / 10); }
+.fr-2-11 .fseg-furi { font-size: calc(var(--example-kanji) * 2 / 11); }
+.fr-2-12 .fseg-furi { font-size: calc(var(--example-kanji) * 2 / 12); }
+.fr-2-13 .fseg-furi { font-size: calc(var(--example-kanji) * 2 / 13); }
+.fr-2-14 .fseg-furi { font-size: calc(var(--example-kanji) * 2 / 14); }
+.fr-2-15 .fseg-furi { font-size: calc(var(--example-kanji) * 2 / 15); }
+.fr-2-16 .fseg-furi { font-size: calc(var(--example-kanji) * 2 / 16); }
+.fr-2-17 .fseg-furi { font-size: calc(var(--example-kanji) * 2 / 17); }
+.fr-2-18 .fseg-furi { font-size: calc(var(--example-kanji) * 2 / 18); }
+.fr-2-19 .fseg-furi { font-size: calc(var(--example-kanji) * 2 / 19); }
+.fr-2-20 .fseg-furi { font-size: calc(var(--example-kanji) * 2 / 20); }
+.fr-3-7 .fseg-furi { font-size: calc(var(--example-kanji) * 3 / 7); }
+.fr-3-8 .fseg-furi { font-size: calc(var(--example-kanji) * 3 / 8); }
+.fr-3-9 .fseg-furi { font-size: calc(var(--example-kanji) * 3 / 9); }
+.fr-3-10 .fseg-furi { font-size: calc(var(--example-kanji) * 3 / 10); }
+.fr-3-11 .fseg-furi { font-size: calc(var(--example-kanji) * 3 / 11); }
+.fr-3-12 .fseg-furi { font-size: calc(var(--example-kanji) * 3 / 12); }
+.fr-3-13 .fseg-furi { font-size: calc(var(--example-kanji) * 3 / 13); }
+.fr-3-14 .fseg-furi { font-size: calc(var(--example-kanji) * 3 / 14); }
+.fr-3-15 .fseg-furi { font-size: calc(var(--example-kanji) * 3 / 15); }
+.fr-3-16 .fseg-furi { font-size: calc(var(--example-kanji) * 3 / 16); }
+.fr-3-17 .fseg-furi { font-size: calc(var(--example-kanji) * 3 / 17); }
+.fr-3-18 .fseg-furi { font-size: calc(var(--example-kanji) * 3 / 18); }
+.fr-3-19 .fseg-furi { font-size: calc(var(--example-kanji) * 3 / 19); }
+.fr-3-20 .fseg-furi { font-size: calc(var(--example-kanji) * 3 / 20); }
+.fr-4-9 .fseg-furi { font-size: calc(var(--example-kanji) * 4 / 9); }
+.fr-4-10 .fseg-furi { font-size: calc(var(--example-kanji) * 4 / 10); }
+.fr-4-11 .fseg-furi { font-size: calc(var(--example-kanji) * 4 / 11); }
+.fr-4-12 .fseg-furi { font-size: calc(var(--example-kanji) * 4 / 12); }
+.fr-4-13 .fseg-furi { font-size: calc(var(--example-kanji) * 4 / 13); }
+.fr-4-14 .fseg-furi { font-size: calc(var(--example-kanji) * 4 / 14); }
+.fr-4-15 .fseg-furi { font-size: calc(var(--example-kanji) * 4 / 15); }
+.fr-4-16 .fseg-furi { font-size: calc(var(--example-kanji) * 4 / 16); }
+.fr-4-17 .fseg-furi { font-size: calc(var(--example-kanji) * 4 / 17); }
+.fr-4-18 .fseg-furi { font-size: calc(var(--example-kanji) * 4 / 18); }
+.fr-4-19 .fseg-furi { font-size: calc(var(--example-kanji) * 4 / 19); }
+.fr-4-20 .fseg-furi { font-size: calc(var(--example-kanji) * 4 / 20); }
+.fr-5-11 .fseg-furi { font-size: calc(var(--example-kanji) * 5 / 11); }
+.fr-5-12 .fseg-furi { font-size: calc(var(--example-kanji) * 5 / 12); }
+.fr-5-13 .fseg-furi { font-size: calc(var(--example-kanji) * 5 / 13); }
+.fr-5-14 .fseg-furi { font-size: calc(var(--example-kanji) * 5 / 14); }
+.fr-5-15 .fseg-furi { font-size: calc(var(--example-kanji) * 5 / 15); }
+.fr-5-16 .fseg-furi { font-size: calc(var(--example-kanji) * 5 / 16); }
+.fr-5-17 .fseg-furi { font-size: calc(var(--example-kanji) * 5 / 17); }
+.fr-5-18 .fseg-furi { font-size: calc(var(--example-kanji) * 5 / 18); }
+.fr-5-19 .fseg-furi { font-size: calc(var(--example-kanji) * 5 / 19); }
+.fr-5-20 .fseg-furi { font-size: calc(var(--example-kanji) * 5 / 20); }
+.fr-6-13 .fseg-furi { font-size: calc(var(--example-kanji) * 6 / 13); }
+.fr-6-14 .fseg-furi { font-size: calc(var(--example-kanji) * 6 / 14); }
+.fr-6-15 .fseg-furi { font-size: calc(var(--example-kanji) * 6 / 15); }
+.fr-6-16 .fseg-furi { font-size: calc(var(--example-kanji) * 6 / 16); }
+.fr-6-17 .fseg-furi { font-size: calc(var(--example-kanji) * 6 / 17); }
+.fr-6-18 .fseg-furi { font-size: calc(var(--example-kanji) * 6 / 18); }
+.fr-6-19 .fseg-furi { font-size: calc(var(--example-kanji) * 6 / 19); }
+.fr-6-20 .fseg-furi { font-size: calc(var(--example-kanji) * 6 / 20); }
+
+/* 용례의 한국어 뜻.  **읽으라고 있는 글자다.**  용례를 보고 뜻이 떠오르는지
+ * 확인하는 자리이므로, 곁다리 표시(급수·품사 뱃지)만 한 크기로는 작다.
+ * 뜻은 후리가나 줄이 아니라 **한자 줄과 수평**으로 놓인다 — `.word` 의
+ * `align-items: last baseline` 이 spell 상자의 마지막 베이스라인(= 한자 줄)에
+ * 맞춘다.  베이스라인 정렬은 글자 크기를 타지 않으므로 크기를 키워도 그대로다. */
+.meaning {
+  min-width: 0;
+  color: oklch(0.56 0.004 85);
+  font-family: var(--kr);
+  font-size: 17px;
+  line-height: 1.55;
+  text-align: right;
+}
+
+.invalid-annotation {
+  color: var(--bad);
+  text-decoration: underline wavy var(--bad);
+  text-underline-offset: 3px;
+}
+
+/* Edit mode preserves the card geometry while exposing the native controls. */
+.edit-card { user-select: text; }
+
+.editable-word {
+  flex-wrap: wrap;
+  padding: 2px 0;
+}
+
+/* 편집기의 표기 칸.  카드의 용례 칸(`.example-spell`)과 같은 이유로 `min-width: 0`
+ * 을 두지 않는다 — 눌리면 `white-space: nowrap` 인 글자가 칸 밖으로 흘러 겹친다.
+ * 자리가 모자라면 `.editable-word` 가 줄을 바꾼다. */
+.spell {
+  color: oklch(0.26 0.004 85);
+  font-family: var(--jp);
+  font-size: 23px;
+  font-weight: 400;
+  letter-spacing: 0.03em;
+  line-height: 1.65;
+  white-space: nowrap;
+}
+
+.spell ruby { ruby-align: center; }
+.spell rt {
+  color: oklch(0.62 0.004 85);
+  font-family: var(--jp);
+  font-size: 12px;
+}
+.spell .printed-ruby rt { color: oklch(0.48 0.09 278); }
+.spell .printed-ruby {
+  text-decoration: underline dotted oklch(0.72 0.06 278);
+  text-underline-offset: 4px;
+}
+
+.words > button.addword { align-self: flex-start; }
+
+.word-foot {
+  width: 100%;
+  flex: 1 0 100%;
+  display: none;
+  align-items: center;
+  gap: 10px;
+  padding-top: 2px;
+  color: var(--ink-4);
+  font-family: var(--kr);
+  font-size: 10px;
+}
+
+.word:hover .word-foot,
+.word:focus-within .word-foot { display: flex; }
+.word-foot .raw { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.word-foot .spacer { flex: 1; }
+
+.editor-tail {
+  margin-top: 56px;
+  padding-top: 28px;
+  border-top: 1px solid oklch(0.93 0.004 85);
+}
+
+.editor-tail-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 18px;
+  color: oklch(0.66 0.004 85);
+  font-family: var(--kr);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+}
+
+.native-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 36px;
+}
+
+.native-section { min-width: 0; }
+.section-title-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+.section-title-row h2 {
+  margin: 0;
+  color: var(--ink-4);
+  font-family: var(--kr);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+}
+.section-count { color: var(--ink-4); font-family: var(--kr); font-size: 11px; }
+.source-badge {
+  padding: 2px 7px;
+  border: 1px solid oklch(0.84 0.05 278);
+  border-radius: 999px;
+  color: oklch(0.48 0.09 278);
+  font-family: var(--kr);
+  font-size: 10px;
+}
+.field-note { margin: 10px 0 0; color: var(--ink-4); font-family: var(--kr); font-size: 11px; }
+
+.korean-groups { display: grid; gap: 10px; }
+.korean-form { display: grid; grid-template-columns: 54px 1fr; gap: 10px; align-items: start; }
+.form-label { padding-top: 7px; color: var(--ink-4); font-family: var(--kr); font-size: 11px; }
+.form-values { display: flex; flex-wrap: wrap; gap: 7px; align-items: center; }
+.editable-chip {
+  display: inline-flex;
+  min-height: 31px;
+  align-items: center;
+  gap: 2px;
+  padding: 3px 3px 3px 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: #fff;
+  font-family: var(--kr);
+  font-size: 13px;
+}
+
+.native-rows { display: grid; gap: 7px; }
+.native-row { display: flex; min-height: 32px; align-items: center; gap: 7px; }
+.native-row .native-key { width: 66px; flex: 0 0 auto; }
+.native-row .native-value { min-width: 0; flex: 1; }
+.native-row input,
+.native-row select {
+  min-width: 0;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  background: #fff;
+  color: var(--ink);
+  font-family: var(--jp), var(--kr);
+  font-size: 12px;
+}
+.native-row select { width: 100%; }
+.none { padding: 8px 0; color: var(--ink-4); font-family: var(--kr); font-size: 12px; }
+
+@media (hover: none) {
+  .word-foot { display: flex; }
+}
+
+@media (max-width: 1050px) {
+  .kanji-card { padding: 48px 36px 44px; }
+  .kc-reading-row { gap: 28px; }
+  .kc-character { font-size: 88px; }
+  .reading-label, .reading-name { font-size: 27px; }
+  .word { gap: 10px; }
+  /* 한자 칸이 줄면 후리가나도 같은 비율로 따라 줄어든다. */
+  .kanji-card { --example-kanji: 20px; }
+  .spell { font-size: 20px; }
+  .meaning { font-size: 16px; }
+}
+
+@media (max-width: 520px) {
+  .kanji-card { padding: 36px 24px 38px; }
+  .kc-head { gap: 20px; padding-bottom: 26px; }
+  .kc-character { font-size: 72px; }
+  .kc-korean { font-size: 15px; }
+  .kc-readings { gap: 36px; padding-top: 32px; }
+  .kc-reading-row { display: grid; grid-template-columns: 1fr; gap: 28px; }
+  .reading-filler { display: none; }
+  .native-grid { grid-template-columns: 1fr; }
+  .word { align-items: flex-start; flex-direction: column; gap: 5px; }
+  .meaning { text-align: left; }
+}

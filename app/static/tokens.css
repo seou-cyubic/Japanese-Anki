@@ -1,0 +1,23 @@
+/* 디자인 토큰 — 화면과 Anki 가 **같은 값을 한 곳에서** 읽는다.
+ *
+ * 예전에는 이 블록이 한자 덱의 card.css 안에 있었다.  그래서 문법 덱의 card.css 가
+ * 한자 덱의 파일에 얹혀 있었고(--ink-4·--warn·--reveal-ease), Anki 쪽은 같은 값을
+ * 손으로 옮겨 적고 있었다.  토큰을 여기 하나로 모아 두면 셋이 어긋날 수 없다.
+ *
+ * 덱 고유의 치수(예: 한자 덱의 --example-kanji)는 그 덱의 card.css 에 남는다. */
+
+:root {
+  --paper: oklch(0.965 0.004 85);
+  --ink: oklch(0.22 0.004 85);
+  --ink-2: oklch(0.34 0.004 85);
+  --ink-3: oklch(0.56 0.004 85);
+  --ink-4: oklch(0.62 0.004 85);
+  --line: oklch(0.9 0.004 85);
+  --line-2: oklch(0.93 0.004 85);
+  --accent: oklch(0.54 0.095 248);
+  --bad: oklch(0.52 0.16 26);
+  --warn: oklch(0.64 0.13 78);
+  --jp: "Noto Sans JP", "Yu Gothic", "Meiryo", sans-serif;
+  --kr: "Noto Sans KR", "Malgun Gothic", sans-serif;
+  --reveal-ease: opacity 320ms cubic-bezier(0.4, 0, 0.2, 1);
+}

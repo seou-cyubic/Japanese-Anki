@@ -1,0 +1,211 @@
+/* 토익 카드.  한자·문법 카드와 같은 종이 위에 앉되, 낱말 하나와 그 뜻들에 맞춘다.
+ * 공용 토큰은 app/static/tokens.css 에 있다. */
+
+:root {
+  --tc-jp: "Noto Sans JP", "Yu Gothic", "Meiryo", sans-serif;
+  --tc-kr: "Noto Sans KR", "Malgun Gothic", sans-serif;
+  --tc-en: "Noto Sans", "Segoe UI", system-ui, sans-serif;
+}
+
+.toeic-card {
+  width: 760px;
+  max-width: 100%;
+  min-height: 300px;
+  margin: 0 auto;
+  padding: 44px 40px 40px;
+  border: 1px solid oklch(0.9 0.004 85);
+  border-radius: 10px;
+  background: #fff;
+  cursor: pointer;
+  user-select: none;
+}
+
+/* 영어 낱말 오른쪽에 어족과 순위가 작은 글씨로 붙는다.  한자 카드에서 한자 원문
+ * 옆에 훈음과 이체자가 붙는 자리와 같다. */
+.tc-head {
+  display: flex;
+  align-items: baseline;
+  gap: 24px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid oklch(0.93 0.004 85);
+}
+
+.tc-title { display: flex; flex: 0 0 auto; align-items: baseline; gap: 10px; }
+
+.tc-en-word {
+  color: oklch(0.22 0.004 85);
+  font-family: var(--tc-en);
+  font-size: 40px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.1;
+}
+
+.tc-band {
+  border: 1px solid oklch(0.85 0.004 85);
+  border-radius: 4px;
+  padding: 1px 6px;
+  color: var(--ink-4);
+  font-family: var(--tc-kr);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+}
+
+.tc-side {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+}
+.tc-family { color: var(--ink-4); font-family: var(--tc-en); font-size: 12px; }
+.tc-rank {
+  color: var(--ink-4);
+  font-family: ui-monospace, "Cascadia Mono", monospace;
+  font-size: 10px;
+  letter-spacing: 0.04em;
+}
+
+.tc-senses {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding-top: 24px;
+}
+
+/* 뜻 하나에 마커 하나와 세로 레일 하나.  한자 카드의 요미카타와 같은 구조다. */
+.tc-sense { margin-left: 2px; }
+.tc-sense-head { display: flex; align-items: baseline; gap: 7px; }
+.tc-dot { color: var(--marker); font-size: 10px; }
+.tc-pos {
+  color: var(--ink-4);
+  font-family: var(--tc-kr);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+}
+.tc-check {
+  border: 1px solid oklch(0.86 0.05 78);
+  border-radius: 3px;
+  padding: 0 5px;
+  color: var(--warn);
+  font-family: var(--tc-kr);
+  font-size: 10px;
+}
+
+.tc-sense-body {
+  margin: 6px 0 0 6px;
+  padding-left: 14px;
+  border-left: 2px solid var(--marker);
+}
+
+/* 왼쪽은 외울 것, 오른쪽은 뜻풀이.
+ *
+ * 일본어 낱말 아래에 예문 두 줄이 이어지고, 짧은 뜻풀이(일본어·영어)는 오른쪽 단에
+ * 쌓인다.  본문 자리를 예문에 내주는 배치다 — 뜻풀이는 뜻을 가르는 표찰이고, 그 뜻이
+ * 어떻게 쓰이는지 보여 주는 것은 예문이다. */
+.tc-columns {
+  display: flex;
+  align-items: first baseline;
+  justify-content: space-between;
+  gap: 24px;
+}
+.tc-main { min-width: 0; flex: 1 1 auto; }
+.tc-aside {
+  display: flex;
+  flex: 0 0 auto;
+  max-width: 44%;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  text-align: right;
+}
+
+.tc-ja {
+  color: oklch(0.24 0.004 85);
+  font-family: var(--tc-jp);
+  font-size: 26px;
+  letter-spacing: 0.02em;
+}
+.tc-gloss {
+  color: oklch(0.56 0.004 85);
+  font-family: var(--tc-jp);
+  font-size: 13px;
+}
+.tc-en {
+  color: var(--ink-4);
+  font-family: var(--tc-en);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+/* 예문 두 줄.  영문이 위, 일문이 아래다 — 읽는 쪽이 영어이기 때문이다. */
+.tc-example { margin-top: 7px; }
+.tc-ex-en {
+  color: oklch(0.42 0.004 85);
+  font-family: var(--tc-en);
+  font-size: 13px;
+  line-height: 1.6;
+}
+.tc-ex-ja {
+  margin-top: 2px;
+  color: oklch(0.42 0.004 85);
+  font-family: var(--tc-jp);
+  font-size: 15px;
+  line-height: 1.9;
+}
+.tc-empty {
+  color: var(--ink-4);
+  font-family: var(--tc-kr);
+  font-size: 13px;
+}
+
+/* 품사별 마커 색.  한자 덱의 음독 82° · 훈독 152° · 동사 248° · 특례 26° 를 그대로
+ * 가져온다.  두 덱을 오갈 때 같은 색이 같은 뜻을 갖게. */
+.pos-noun      { --marker: oklch(0.620 0.115 82); }
+.pos-verb      { --marker: oklch(0.540 0.095 248); }
+.pos-adjective { --marker: oklch(0.560 0.085 152); }
+.pos-adverb    { --marker: oklch(0.540 0.125 26); }
+.pos-function  { --marker: oklch(0.62 0.004 85); }
+
+.toeic-card ruby { ruby-align: center; }
+.toeic-card rt {
+  color: oklch(0.62 0.004 85);
+  font-family: var(--tc-jp);
+  font-size: 0.42em;
+}
+
+/* 카드 면.  **가리는 일은 전부 여기서 한다** — 렌더러는 언제나 같은 DOM 을 내고
+ * 클래스 하나로 앞뒤가 갈린다.
+ *
+ *   뜻 앞면   — 영어 낱말만 보고 **일본어 뜻을 떠올린다.**  일본어와 뜻풀이를 가리고
+ *               **예문도 가린다.**  낱말을 보고 뜻을 아는지 먼저 확인해야 하고,
+ *               예문은 뒤집은 뒤에 그 뜻을 되짚는 자리다.  앞면에 두면 예문이
+ *               답을 흘린다.
+ *   철자 앞면 — 일본어 뜻과 **일본어 예문**을 보고 영어를 떠올린다.  완성된 일문을
+ *               두고 영작이 되는지 스스로 재 볼 수 있으므로 예문이 있는 편이 낫다.
+ *               영어는 전부 가린다(낱말·어족·영어 뜻풀이·영어 예문).
+ *
+ * 품사와 마커는 어느 면에서도 지우지 않는다.  '명사 세 개' 라는 사실 자체가 문제의
+ * 일부이고, 그것이 보여야 몇 개를 떠올려야 하는지 안다.
+ *
+ * **가리는 것은 `visibility` 다.**  `opacity: 0` 을 쓰면 브라우저에서는 가려지는데
+ * Anki 에서는 **루비 주석(`<rt>`)이 그대로 보인다** — 웹뷰에 따라 루비가 부모의
+ * 투명도를 물려받지 않기 때문이다.  `visibility` 는 상속되는 속성이라 자식이
+ * `visible` 로 되돌리지 않는 한 반드시 숨고, 칸은 opacity 와 똑같이 남는다. */
+.toeic-card.reading-front .tc-ja,
+.toeic-card.reading-front .tc-gloss,
+.toeic-card.reading-front .tc-en,
+.toeic-card.reading-front .tc-ex-en,
+.toeic-card.reading-front .tc-ex-ja { visibility: hidden; }
+
+.toeic-card.spell-front .tc-en-word,
+.toeic-card.spell-front .tc-family,
+.toeic-card.spell-front .tc-en,
+.toeic-card.spell-front .tc-ex-en { visibility: hidden; }
+
+@media (max-width: 1050px) {
+  .toeic-card { padding: 32px 26px 28px; }
+  .tc-en-word { font-size: 32px; }
+  .tc-ja { font-size: 22px; }
+}
