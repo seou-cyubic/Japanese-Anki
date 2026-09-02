@@ -40,9 +40,25 @@ VARIANT_LABELS = (
     "印刷標準字体（表外漢字字体表）",
 )
 REQUIRED_FIELDS = ("tag", "variant", "except", "readings", "korean")
-OPTIONAL_FIELDS = ("korean_src",)
+OPTIONAL_FIELDS = ("korean_src", "note")
+
+# 常用漢字表 본표 備考 칸에서 온 것.  **읽기·용례와 섞이지 않는 자리**다 —
+# `decks/kanji/pipeline/notes.py` 참조.
+NOTE_KINDS = {
+    "special_reading": ("of", "word", "reading"),
+    "also_read": ("of", "word", "reading"),
+    "also_reading": ("of", "reading"),
+    "also_written": ("of", "word", "written"),
+    "same_kun": ("of", "words"),
+    "text": ("of", "body"),
+}
 # 후리가나는 표기 `w` 안에 실린다.  별도의 `ja` 필드는 없다.
 EXAMPLE_FIELDS = ("w", "ko")
+
+# 한 용례가 가질 수 있는 뜻의 최대 개수.  그 이상은 카드 한 줄에 담기지 않고,
+# 그만큼 갈라야 할 만큼 다의적인 낱말이면 용례로 삼은 것 자체를 다시 봐야 한다.
+MAX_SENSES = 3
+SENSE_SEPARATOR = "\n"
 
 
 class ContractError(ValueError):
@@ -57,6 +73,47 @@ def is_one_codepoint(value: Any) -> bool:
 
 def codepoint_label(character: str) -> str:
     return f"U+{ord(character):04X}"
+
+
+def senses(korean_meaning: str) -> list[str]:
+    """용례의 뜻 문자열을 **뜻 하나씩**으로 가른다.
+
+    **가르는 것은 줄바꿈 하나뿐이다.**  예전에는 이 자리에 쉼표와 세미콜론이 섞여
+    있었는데, 그 둘의 뜻을 정한 곳이 어디에도 없었다 — 뜻을 받아 오는 프롬프트에
+    구분자 이야기가 한 글자도 없었으므로, 그것은 규약이 아니라 모델의 그때그때의
+    습관이었다.  실제로 세미콜론의 절반 가까이는 다른 뜻이 아니라 앞 낱말의 우리말
+    풀이였고(``역내; 구역의 안``), 쉼표 쪽에는 명백히 다른 뜻이 들어 있었다
+    (``눈알, 안구, (비유) 주요 상품``).  그래서 그 둘을 해석하는 대신 **뜻을 다시 받아**
+    경계를 줄바꿈 하나로 못박았다.
+
+    쉼표·가운뎃점은 이제 뜻의 경계가 아니라 **한 뜻 안의 글자**다 —
+    ``송죽매, 소나무·대나무·매화나무`` 는 뜻 하나다.
+    """
+    return [line.strip() for line in str(korean_meaning or "").split(SENSE_SEPARATOR)
+            if line.strip()]
+
+
+def first_sense(korean_meaning: str) -> str:
+    """대표 뜻.  정렬과 검색이 문자열 하나를 필요로 하는 자리에 쓴다."""
+    found = senses(korean_meaning)
+    return found[0] if found else ""
+
+
+def _top_level_semicolon(value: str) -> bool:
+    """괄호 **밖**의 세미콜론이 있는가.
+
+    ``일위(자위대 계급의 하나; 대위)`` 처럼 괄호 안의 세미콜론은 뜻풀이의 글자이지
+    뜻의 경계가 아니다.  경계로 쓰인 것만 잡는다.
+    """
+    depth = 0
+    for character in value:
+        if character in "(（[［":
+            depth += 1
+        elif character in ")）]］":
+            depth = max(0, depth - 1)
+        elif character == ";" and depth == 0:
+            return True
+    return False
 
 
 def korean_display(korean: dict[str, list[str]]) -> list[str]:
@@ -77,8 +134,9 @@ record_etag = shared_record_etag
 
 def ordered_record(record: dict[str, Any]) -> dict[str, Any]:
     ordered: dict[str, Any] = {name: record[name] for name in REQUIRED_FIELDS}
-    if record.get("korean_src") is not None:
-        ordered["korean_src"] = record["korean_src"]
+    for name in OPTIONAL_FIELDS:
+        if record.get(name) is not None:
+            ordered[name] = record[name]
     return ordered
 
 
@@ -105,6 +163,18 @@ def _validate_example(
             errors.append(spot + f" `{field}`가 비었다")
         elif value != value.strip():
             errors.append(spot + f" `{field}` 앞뒤에 공백이 있다")
+    meaning = example.get("ko")
+    if isinstance(meaning, str) and meaning.strip():
+        found = senses(meaning)
+        if len(found) > MAX_SENSES:
+            errors.append(spot + f" `ko`의 뜻이 {len(found)}개다 — {MAX_SENSES}개까지다")
+        if any(line != line.strip() or not line.strip()
+               for line in meaning.split(SENSE_SEPARATOR)):
+            errors.append(spot + " `ko`에 빈 줄이나 줄 앞뒤 공백이 있다")
+        if _top_level_semicolon(meaning):
+            # 뜻을 가르는 것은 줄바꿈뿐이다.  세미콜론이 경계로 남아 있다는 것은
+            # 옛 표기가 그대로 실려 왔다는 뜻이므로, 조용히 넘기지 않는다.
+            errors.append(spot + " `ko`에 뜻을 가르는 세미콜론이 남아 있다")
     if not isinstance(example.get("w"), str):
         return
     # 후리가나는 별도 필드가 아니라 표기 안에 실린다.  주석 문법이 성립하는지만 본다.
@@ -113,6 +183,43 @@ def _validate_example(
         errors.append(spot + " `w`의 후리가나 주석이 문법에 맞지 않는다")
     elif required_reading is not None and not reading_matches(parsed, required_reading):
         errors.append(spot + f" 전체 읽기에 특례 읽기 `{required_reading}`가 들어있지 않다")
+
+
+def _validate_notes(character: str, note: Any) -> list[str]:
+    """``note`` 는 備考 항목의 목록이고, 항목마다 종류가 필드를 정한다.
+
+    종류마다 필드를 **정확히** 요구한다.  備考 는 성격이 다른 것들이 한 칸에 섞여
+    있던 자리이므로, 무엇이 들어와도 되는 느슨한 칸을 하나 더 만들면 처음 문제가
+    자리만 옮겨 되풀이된다.
+    """
+    prefix = f"{character}: note "
+    if not isinstance(note, list) or not note:
+        return [prefix + "는 비어 있지 않은 목록이어야 한다"]
+    errors: list[str] = []
+    for index, entry in enumerate(note):
+        spot = prefix + f"{index + 1}번"
+        if not isinstance(entry, dict):
+            errors.append(spot + "은 object여야 한다")
+            continue
+        kind = entry.get("kind")
+        if kind not in NOTE_KINDS:
+            errors.append(spot + f" 모르는 종류 — {kind!r}")
+            continue
+        wanted = set(NOTE_KINDS[kind]) | {"kind"}
+        missing = sorted(wanted - set(entry))
+        unknown = sorted(set(entry) - wanted)
+        if missing:
+            errors.append(spot + " 필수 필드 없음: " + ", ".join(missing))
+        if unknown:
+            errors.append(spot + " 모르는 필드: " + ", ".join(unknown))
+        for field, value in entry.items():
+            if field == "words":
+                if not isinstance(value, list) or not value or not all(
+                        isinstance(word, str) and word.strip() for word in value):
+                    errors.append(spot + " words 는 비어 있지 않은 문자열 배열이어야 한다")
+            elif not isinstance(value, str) or not value.strip():
+                errors.append(spot + f" `{field}`가 비었다")
+    return errors
 
 
 def validate_record(character: str, record: Any) -> list[str]:
@@ -184,6 +291,9 @@ def validate_record(character: str, record: Any) -> list[str]:
                 continue
             for index, example in enumerate(examples):
                 _validate_example(example, where + f" 용례 {index + 1}", errors)
+
+    if "note" in record:
+        errors.extend(_validate_notes(character, record["note"]))
 
     korean = record["korean"]
     if not isinstance(korean, dict):

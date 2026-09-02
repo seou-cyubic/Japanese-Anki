@@ -25,7 +25,9 @@ class PipelineOutputTest(unittest.TestCase):
         cls.japanese = load("kanji", "data_japanese.json")
         cache = load("kanji", "cache.json")
         model_cache = cache["gemini-3.7-flash"]
-        cls.word_cache = model_cache["word_ko"]
+        # 뜻은 이제 표기가 아니라 **(한자, 요미카타, 표기)** 에 붙는다.  표기 하나에
+        # 답 하나였던 옛 칸(``word_ko``)으로는 ``音(おと)`` 와 ``音(ね)`` 를 가를 수 없었다.
+        cls.word_cache = model_cache["word_ko_v2"]
         cls.furigana_cache = model_cache["furigana"]
 
     def test_stage5_only_adds_furigana_to_every_example(self) -> None:
@@ -64,7 +66,8 @@ class PipelineOutputTest(unittest.TestCase):
                         if bucket == "except":
                             self.assertTrue(reading_matches(parsed, reading))
                         surface = plain_surface(japanese["w"])
-                        self.assertEqual(self.word_cache[surface], japanese["ko"])
+                        cached = self.word_cache[f"{character}|{reading}|{surface}"]
+                        self.assertEqual("\n".join(cached["ko"]), japanese["ko"])
                         self.assertEqual(
                             self.furigana_cache[f"{surface}|{reading}"],
                             japanese["w"],
@@ -95,8 +98,11 @@ class PipelineOutputTest(unittest.TestCase):
             "はー": ["生える", "生やす", "芽生える"],
         }
         for reading, words in expected.items():
+            # 순서는 ``ordering.py`` 가 뜻 길이까지 보아 정한다.  여기서 잠그는 것은
+            # **어느 읽기 키가 어느 용례를 지는가** 이므로 순서를 빼고 견준다.
             self.assertEqual(
-                [plain_surface(example["w"]) for example in readings[reading]], words
+                sorted(plain_surface(example["w"]) for example in readings[reading]),
+                sorted(words),
             )
         for obsolete in (
             "いきー",
@@ -127,13 +133,15 @@ class PipelineOutputTest(unittest.TestCase):
                     self.assertNotIn(wrong, self.japanese[character]["readings"])
 
     def test_exception_keys_are_whole_word_readings(self) -> None:
+        # 잠그는 것은 **어느 키 아래 어느 표기가 오는가** 다.  뜻 문자열은 모델이
+        # 내는 것이라 다시 받을 때마다 달라질 수 있고, 그것은 이 시험의 주제가 아니다.
         self.assertEqual(
-            self.japanese["生"]["except"]["やよい"],
-            [{"w": "弥生(やよい)", "ko": "음력 3월"}],
+            [example["w"] for example in self.japanese["生"]["except"]["やよい"]],
+            ["弥生(やよい)"],
         )
         self.assertEqual(
-            self.japanese["乙"]["except"]["さおとめ"],
-            [{"w": "早乙女(さおとめ)", "ko": "모심는 처녀"}],
+            [example["w"] for example in self.japanese["乙"]["except"]["さおとめ"]],
+            ["早乙女(さおとめ)"],
         )
 
     def test_regular_reading_keeps_the_kanji_out_of_except(self) -> None:
@@ -184,13 +192,13 @@ class PipelineOutputTest(unittest.TestCase):
         요미가나 캐시에까지 남아 있었으므로 여기서 못박는다.
         """
         self.assertEqual(
-            [example["w"] for example in self.japanese["朝"]["readings"]["チョウ"]],
-            ["今朝(こんちょう)", "朝食(ちょうしょく)", "早朝(そうちょう)"],
+            sorted(example["w"] for example in self.japanese["朝"]["readings"]["チョウ"]),
+            sorted(["今朝(こんちょう)", "朝食(ちょうしょく)", "早朝(そうちょう)"]),
         )
         self.assertEqual(
-            [example["w"] for example in self.japanese["今"]["readings"]["コン"]],
-            ["今日(こんにち)", "今朝(こんちょう)", "今年(こんねん)",
-             "昨今(さっこん)", "今後(こんご)"],
+            sorted(example["w"] for example in self.japanese["今"]["readings"]["コン"]),
+            sorted(["今日(こんにち)", "今朝(こんちょう)", "今年(こんねん)",
+                    "昨今(さっこん)", "今後(こんご)"]),
         )
 
     def test_genuine_note_column_examples_survive(self) -> None:
@@ -212,9 +220,9 @@ class PipelineOutputTest(unittest.TestCase):
         for (character, reading), words in expected.items():
             with self.subTest(character=character):
                 self.assertEqual(
-                    [plain_surface(example["w"])
-                     for example in self.japanese[character]["readings"][reading]],
-                    words,
+                    sorted(plain_surface(example["w"])
+                           for example in self.japanese[character]["readings"][reading]),
+                    sorted(words),
                 )
 
     def test_distinction_marker_notes_never_leak_as_examples(self) -> None:

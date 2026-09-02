@@ -73,6 +73,7 @@ venv/
 *.log
 스크린샷*.png
 Screenshot*.png
+*.txt
 
 # 도구가 남기는 것.  설정을 공유하고 싶으면 .claude/settings.json 만
 # `git add -f` 로 따로 올린다 — 잠금·상태 파일은 사람마다 다르다.

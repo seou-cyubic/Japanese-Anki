@@ -418,6 +418,9 @@ button.primary:focus-visible, button.ghost:focus-visible { outline: 2px solid ok
 .editor-example { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px; }
 .editor-meaning { font-family: var(--kr); font-size: 12px; }
 
+/* 뜻이 여러 줄인 칸.  줄바꿈이 곧 뜻의 경계이므로 접지 않고 그대로 보인다. */
+.field-value.senses { white-space: pre-wrap; }
+
 /* 용례 전체의 후리가나를 한 번에 받는다. 한 줄에 용례 하나, 순서 고정. */
 .bulk-furigana { display: flex; flex-direction: column; gap: 5px; }
 

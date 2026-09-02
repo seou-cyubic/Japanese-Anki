@@ -6,6 +6,11 @@
  * 쓰인 문장들' 을 보여 준다.  예문마다 문법 구간이 `*` 로 표시되어 있으므로
  * split 한 번으로 갈라 강조한다.
  *
+ * **구간은 하나가 아니다.**  `たり～たりする` 처럼 표제형 가운데가 비어 있는 문형은
+ * 문장 안에서 떨어져 실현되고(`…読んだり、テレビを見たりします`), 그 사이에 낀 말은
+ * 문법이 아니다.  그래서 별표는 짝수 개이고 조각마다 한 쌍이 붙는다 — split 한 뒤
+ * 홀수 번째가 문법이다.  강조가 몇 덩이든 DOM 을 만드는 방법은 같다.
+ *
  * 면은 둘이다.  뜻 앞면은 일본어 예문만 보고 뜻을 떠올리게 하고, 작문 앞면은
  * 한국어만 보고 일본어를 짓게 한다.  어느 쪽이든 문법 구간은 강조한 채로 둔다 —
  * 어느 부분이 그 문형인지 보면서 연습하는 것이 이 카드의 요점이다.
@@ -42,12 +47,24 @@
     return out;
   };
 
-  /* `앞*문법*뒤` 를 셋으로.  표시가 없으면 가운데가 빈다. */
-  const splitMarked = (marked) => {
+  /* `앞*문법*사이*문법*뒤` 를 조각으로.  홀수 번째가 문법이다.
+   * 표시가 없으면 조각 하나(문법 아님)만 나온다. */
+  const splitMarks = (marked) => {
     const parts = String(marked || '').split(MARK);
-    if (parts.length >= 3) return [parts[0], parts[1], parts.slice(2).join(MARK)];
-    return [String(marked || ''), '', ''];
+    if (parts.length < 3) return [{ text: String(marked || ''), grammar: false }];
+    /* 별표가 홀수 개면 마지막 하나는 짝이 없다.  그 조각은 본문으로 둔다. */
+    const pairs = Math.floor((parts.length - 1) / 2);
+    const out = [];
+    for (let index = 0; index < parts.length; index += 1) {
+      const grammar = index % 2 === 1 && index <= pairs * 2;
+      if (parts[index]) out.push({ text: parts[index], grammar });
+    }
+    return out;
   };
+
+  /* 문법 조각들만.  '이 예문의 문법 구간' 을 문자열로 보던 자리를 위한 것이다. */
+  const markedSpans = (marked) =>
+    splitMarks(marked).filter((piece) => piece.grammar).map((piece) => piece.text);
 
   /* 주석 표기를 루비로 그린다.  ``空港(くうこう)`` -> <ruby>空港<rt>くうこう</rt></ruby> */
   function rubyInto(parent, annotated) {
@@ -92,21 +109,22 @@
     const row = node('div', 'bn-ex');
     const line = node('div', 'bn-ja');
     line.append(node('span', 'bn-no', example.no || String(position)));
-    const [before, grammar, after] = splitMarked(example.marked || example.ja || '');
+    const pieces = splitMarks(example.marked || example.ja || '');
     const body = node('span', 'bn-body');
-    rubyInto(body, before);
-    if (grammar) {
+    let marks = 0;
+    for (const piece of pieces) {
+      if (!piece.grammar) { rubyInto(body, piece.text); continue; }
+      marks += 1;
       const span = node('span', 'bn-span');
-      rubyInto(span, grammar);
+      rubyInto(span, piece.text);
       body.append(span);
     }
-    rubyInto(body, after);
     line.append(body);
     row.append(line);
     row.append(node('div', 'bn-ko', example.ko || ''));
     /* 문법 구간이 비었다는 표시는 **편집기의 진단**이다.  학습 카드에 띄울 것이
      * 아니므로 Anki 는 diagnostics:false 로 끈다. */
-    if (!grammar && options.diagnostics !== false) {
+    if (!marks && options.diagnostics !== false) {
       row.append(node('div', 'bn-unmarked', '문법 구간 미표시'));
     }
     return row;
@@ -165,5 +183,5 @@
     return card;
   }
 
-  window.BunpoCard = { render, noteFrom, plainSurface, splitMarked, MARK };
+  window.BunpoCard = { render, noteFrom, plainSurface, splitMarks, markedSpans, MARK };
 })();

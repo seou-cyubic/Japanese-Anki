@@ -129,12 +129,14 @@ if (liveSei.examples.map((example) => example._sourceIndex).join(',') !== '0,1,2
   throw new Error('projected 生/セイ examples must retain canonical source indices');
 }
 const liveExceptions = liveLayout.find((group) => group.key === 'exc').readings;
-// 실데이터의 뜻 길이는 '음력 3월'(5) < '잔디밭, 잔디'(8) 이므로 弥生 가 앞선다.
 if (liveExceptions.length !== 1 || liveExceptions[0].rawKey !== 'X') {
   throw new Error('生 exceptions must collapse into one X marker');
 }
+/* 잠그는 것은 **한 번씩만 남는가** 다.  줄 세우는 순서는 뜻 길이까지 보아 정해지므로
+ * (`pipeline/ordering.py`) 뜻을 다시 받으면 달라질 수 있고, 그것은 여기의 주제가 아니다. */
 if (liveExceptions.flatMap((reading) => reading.examples)
-  .map((example) => window.KanjiCard.displayParts(example).surface).join('|') !== '弥生|芝生') {
+  .map((example) => window.KanjiCard.displayParts(example).surface).sort().join('|')
+    !== '弥生|芝生') {
   throw new Error('生 exception group must retain 弥生 and 芝生 exactly once');
 }
 if (JSON.stringify(liveRecord) !== liveRecordBeforeProjection) {
@@ -503,6 +505,67 @@ if (descendants(withVariant, 'kc-variants').length !== 1
   throw new Error('the header must carry the variant row beside the character');
 }
 
+/* 뜻이 여럿인 용례.  뒷면은 번호를 붙여 줄마다 나누고, **개수는 앞면에서도 보인다** —
+ * 무엇을 몇 개 떠올려야 하는지는 정답이 아니라 문제의 일부다. */
+const manySenses = {
+  ...previewNote,
+  /* 예외 칸까지 실제 데이터를 물고 오면 그쪽 뜻의 개수가 이 셈에 섞인다.  여기서
+   * 재는 것은 이 두 용례뿐이므로 예외는 비워 둔다. */
+  except: {},
+  note: [],
+  readings: [{ rawKey: 'め', group: 'kun',
+    examples: [{ w: '目玉(めだま)', ko: '눈알\n(비유) 주요 상품' },
+               { w: '生(なま)', ko: '날것' }] }]
+};
+const sensesBack = window.KanjiCard.render(manySenses, { mode: 'reading-back' });
+if (descendants(sensesBack, 'meaning-sense').length !== 2) {
+  throw new Error('each sense must get its own numbered line');
+}
+if (descendants(sensesBack, 'sense-no').map((n) => n.textContent).join('') !== '1.2.') {
+  throw new Error('the senses must be numbered in order');
+}
+const sensesFront = window.KanjiCard.render(manySenses, { mode: 'reading-front' });
+for (const card of [sensesFront, sensesBack]) {
+  const badges = descendants(card, 'sense-count');
+  if (badges.length !== 1) {
+    throw new Error(`only the multi-sense example carries a count: ${badges.length}`);
+  }
+  if (badges[0].textContent !== '2') throw new Error('the badge must say how many');
+}
+/* 개수는 `reveal-` 계열이 아니어야 앞면에 남는다 — 그 접두사가 붙은 것은 앞면에서
+ * 투명해지는 정답 쪽이다(card.css). */
+if (descendants(sensesFront, 'reveal-meaning').some(
+  (node) => descendants(node, 'sense-count').length)) {
+  throw new Error('the count must not sit inside the part the front hides');
+}
+
+/* 常用漢字表 본표의 備考.  표의 다른 어디에도 없는 읽기가 여기 들어 있다. */
+const withNote = {
+  ...previewNote,
+  note: [{ kind: 'special_reading', of: 'オン', word: '観音', reading: 'カンノン' },
+         { kind: 'same_kun', of: 'もと', words: ['元', '本', '基'] }]
+};
+const noteCard = window.KanjiCard.render(withNote, { mode: 'reading-back' });
+if (descendants(noteCard, 'kc-note-row').length !== 2) {
+  throw new Error('every note row must reach the card');
+}
+if (descendants(noteCard, 'kc-note-word')[0].textContent !== '観音'
+    || descendants(noteCard, 'kc-note-value')[0].textContent !== 'カンノン') {
+  throw new Error('the reading only the remarks column knows must be shown');
+}
+if (descendants(noteCard, 'kc-note-body')[1].textContent !== '元 · 本 · 基') {
+  throw new Error('same-kun cross references must list every kanji');
+}
+if (descendants(window.KanjiCard.render({ ...previewNote, note: [] },
+  { mode: 'reading-back' }), 'kc-notes').length !== 0) {
+  throw new Error('a kanji without remarks must not grow an empty note block');
+}
+/* 備考 가 있는 한자는 실데이터에서도 그 줄을 낸다 — 生 은 同訓異字 둘을 진다. */
+if (descendants(window.KanjiCard.render(previewNote, { mode: 'reading-back' }),
+  'kc-note-row').length !== previewNote.note.length) {
+  throw new Error('the live record must draw one row per remark');
+}
+
 // 후리가나는 한자 칸에 배정된다.  기본은 한 칸에 두 자이고, 넘치면 줄인다.
 const cellsOf = (annotated) => window.KanjiCard.spellCells({ w: annotated });
 const scaleOf = (kanji, reading) => window.KanjiCard.furiganaClass(kanji, reading);
@@ -558,13 +621,38 @@ if (descendants(bunpoCard, 'bn-grammar')[0].textContent !== bunpoRecord.head) {
 
 /* 문법 구간은 `*` 한 쌍이 곧 데이터다.  split 한 번으로 갈라 강조한다. */
 const marked = '愛(あい)*あっての*結(けっ)婚(こん)';
-const [, span] = window.BunpoCard.splitMarked(marked);
-if (span !== 'あっての') throw new Error('splitMarked must return the marked span');
+const [span] = window.BunpoCard.markedSpans(marked);
+if (span !== 'あっての') throw new Error('markedSpans must return the marked span');
 const spanCard = window.BunpoCard.render(
   { head: 'あっての', examples: [{ marked, ja: marked.split('*').join(''), ko: '뜻' }] },
   { mode: 'reading-front' });
 if (descendants(spanCard, 'bn-span').length !== 1) {
   throw new Error('the marked span must be highlighted exactly once');
+}
+
+/* **구간은 하나가 아니다.**  `たり～たりする` 는 문장 안에서 떨어져 실현되므로 조각마다
+ * 한 쌍이 붙는다.  사이에 낀 말은 문법이 아니므로 강조되지 않아야 한다. */
+const split = '本(ほん)を読(よ)ん*だり*、テレビを見(み)*たりします*。';
+const pieces = window.BunpoCard.markedSpans(split);
+if (pieces.join('|') !== 'だり|たりします') {
+  throw new Error(`markedSpans must return every piece: ${pieces.join('|')}`);
+}
+const splitSpanCard = window.BunpoCard.render(
+  { head: 'たり～たりする',
+    examples: [{ marked: split, ja: split.split('*').join(''), ko: '뜻' }] },
+  { mode: 'reading-front' });
+const highlighted = descendants(splitSpanCard, 'bn-span');
+if (highlighted.length !== 2) {
+  throw new Error(`each piece must be highlighted on its own: ${highlighted.length}`);
+}
+if (descendants(splitSpanCard, 'bn-unmarked').length !== 0) {
+  throw new Error('an example with pieces is marked — no warning belongs on it');
+}
+/* 조각 사이의 말은 강조 밖에 남는다 — 그것이 이 고침의 요점이다. */
+for (const node of highlighted) {
+  if (node.textContent.includes('テレビ')) {
+    throw new Error('the content the pattern wraps must not be highlighted');
+  }
 }
 
 /* 후리가나는 **한자 위에** 붙는다.  걸릴 한자가 없으면 루비를 만들지 않는다.

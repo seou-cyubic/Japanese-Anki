@@ -418,6 +418,73 @@
   text-align: right;
 }
 
+/* 뜻이 여럿인 용례는 번호를 붙여 줄마다 나눈다.  번호는 뜻보다 흐리게 두어
+ * 읽는 눈이 뜻에 먼저 닿게 한다. */
+.meaning-sense {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.sense-no {
+  flex: none;
+  color: var(--ink-4);
+  font-variant-numeric: tabular-nums;
+}
+
+/* 용례 옆에 붙는 뜻 개수.  **앞면에서도 보인다** — 무엇을 몇 개 떠올려야 하는지는
+ * 정답이 아니라 문제의 일부다.  그래서 `reveal-` 계열에 넣지 않는다.
+ * 한자 줄의 위쪽에 어깨번호처럼 붙으므로 `align-self: flex-start` 다. */
+.sense-count {
+  align-self: flex-start;
+  margin-left: 3px;
+  color: var(--ink-4);
+  font-family: var(--kr);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+/* 常用漢字表 본표의 備考.  카드 맨 아래에 한 줄씩 놓인다 — 용례가 아니므로
+ * 요미카타 칸에 섞지 않는다.  정답 쪽이라 앞면에서는 `reveal-meaning` 이 가린다. */
+.kc-notes {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 26px;
+  padding-top: 18px;
+  border-top: 1px solid var(--line-2);
+  font-size: 14px;
+}
+
+.kc-note-row {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.kc-note-of {
+  flex: none;
+  min-width: 4.5em;
+  color: var(--ink-4);
+  font-family: var(--jp);
+  text-align: right;
+}
+
+.kc-note-kind {
+  flex: none;
+  min-width: 8.5em;
+  color: var(--ink-4);
+  font-family: var(--kr);
+  font-size: 12px;
+}
+
+.kc-note-body { font-family: var(--jp); }
+
+.kc-note-word { margin-right: 8px; }
+
+.kc-note-value { color: var(--ink-4); }
+
 .invalid-annotation {
   color: var(--bad);
   text-decoration: underline wavy var(--bad);

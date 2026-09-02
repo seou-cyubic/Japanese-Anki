@@ -546,8 +546,8 @@ function renderBunpoEditor(box) {
     const group = el('div', 'editor-reading');
     const label = el('div', 'editor-reading-head');
     label.append(el('span', 'muted', String(example.no || index + 1)));
-    const span = BunpoCard.splitMarked(example.marked || example.ja || '')[1];
-    label.append(el('span', 'bn-chip', span || '구간 미표시'));
+    const spans = BunpoCard.markedSpans(example.marked || example.ja || '');
+    label.append(el('span', 'bn-chip', spans.join(' … ') || '구간 미표시'));
     group.append(label);
 
     const ja = editable(['examples', index, 'marked'],
@@ -587,7 +587,8 @@ function bunpoBulkField() {
   area.setAttribute('aria-label', '예문 일괄 입력');
   area.value = rows.map((example) => example.marked || example.ja || '').join('\n');
   wrap.append(el('div', 'muted',
-    `한 줄에 예문 하나. 문법 구간은 별표로 감싼다. 줄 수(${rows.length})를 지켜야 한다.`));
+    `한 줄에 예문 하나. 문법 구간마다 별표 한 쌍으로 감싼다(구간이 둘 이상일 수 있다). `
+    + `줄 수(${rows.length})를 지켜야 한다.`));
   wrap.append(area);
 
   const report = el('div', 'bulk-report');
@@ -606,7 +607,7 @@ function bunpoBulkField() {
         return;
       }
       const marks = marked.split(BunpoCard.MARK).length - 1;
-      if (marks !== 0 && marks !== 2) {
+      if (marks % 2) {
         failures.push(`${position + 1}행: 별표가 짝을 이루지 않는다`);
       }
     });
@@ -785,7 +786,8 @@ function exampleRows() {
       examples.forEach((example, index) => {
         const row = el('div', 'editor-example');
         row.append(editableAnnotation(bucket, rawKey, index, example));
-        const meaning = editable([bucket, rawKey, index, 'ko'], example.ko, '한국어 뜻');
+        const meaning = editableSenses([bucket, rawKey, index, 'ko'],
+          example.ko, '한국어 뜻 (줄 하나가 뜻 하나)');
         meaning.classList.add('editor-meaning');
         row.append(meaning);
         row.append(wordFoot(bucket, rawKey, index, example, sourceIndices, index));
@@ -973,6 +975,37 @@ function editable(path, value, placeholder) {
     field.textContent = next;
     writePath(path, next);
     if (path[0] === 'korean' && path[1] === '본') syncKoreanSource();
+    renderAfterEditing();
+  };
+  field.onkeydown = (event) => handleEditableKeydown(event, field);
+  return field;
+}
+
+/* 용례의 뜻은 **여러 줄일 수 있다** — 줄 하나가 뜻 하나다(`decks/kanji/model.py`).
+ *
+ * 다른 칸은 줄바꿈을 지운다.  한 줄짜리 값에 줄바꿈이 섞이면 저장 파일이 깨지기
+ * 때문이다.  이 칸만은 반대다 — 줄바꿈이 곧 데이터이므로 지우면 뜻이 합쳐진다.
+ * Shift+Enter 로 뜻을 하나 더 만들고, Enter 는 다른 칸과 같이 편집을 끝낸다.
+ * 다듬는 것(줄 앞뒤 공백·빈 줄 제거)은 끝낼 때 한 번만 한다 — 칠 때마다 다듬으면
+ * 방금 만든 빈 줄이 그 자리에서 사라져 뜻을 더 쓸 수가 없다. */
+function editableSenses(path, value, placeholder) {
+  const field = el('div', 'field-value senses', value || '');
+  field.contentEditable = 'plaintext-only';
+  field.spellcheck = false;
+  field.dataset.empty = placeholder || '';
+  field.setAttribute('aria-label', placeholder || path.join('.'));
+  const tidy = (text) => String(text || '').split('\n')
+    .map((line) => line.trim()).filter(Boolean).join('\n');
+  const sync = () => {
+    writePath(path, field.innerText);
+    markDirty();
+  };
+  field.oninput = sync;
+  field.oncompositionend = sync;
+  field.onblur = () => {
+    const next = tidy(field.innerText);
+    field.textContent = next;
+    writePath(path, next);
     renderAfterEditing();
   };
   field.onkeydown = (event) => handleEditableKeydown(event, field);

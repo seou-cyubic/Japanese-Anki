@@ -14,8 +14,10 @@ sys.path.insert(0, str(ROOT / "decks" / "bunpo" / "pipeline"))
 
 from tests import deck_data, load  # noqa: E402
 
-from marking import (MARK, find_span, mark, mark_with_span, marked_span,  # noqa: E402
-                     views)
+import marking  # noqa: E402
+from marking import (MARK, Lexicon, find_span, mark,  # noqa: E402
+                     mark_with_span, mark_with_spans, marked_span,
+                     marked_spans, views)
 from shared.deckspec import discover  # noqa: E402
 from shared.paths import DECKS  # noqa: E402
 
@@ -74,9 +76,106 @@ class MarkingTest(unittest.TestCase):
         marked, _ = mark("約(やく)束(そく)した以(い)上(じょう)、", "いじょう（は）")
         self.assertEqual(marked_span(marked), "以(い)上(じょう)")
 
-    def test_tilde_stands_for_arbitrary_content(self) -> None:
+    def test_tilde_is_not_part_of_the_grammar(self) -> None:
+        """``～`` 자리는 문형이 **아니라** 문형이 감싸는 내용이다.
+
+        예전에는 표기법이 구간 하나밖에 담지 못해 ``あまりの暑さに`` 를 통째로 표시했다.
+        가운데의 ``暑さ`` 는 이 문형과 아무 상관이 없는데도 강조된 셈이다.
+        """
         marked, _ = mark("は あまりの暑(あつ)さに 食(しょく)欲(よく)", "あまりの～に")
-        self.assertEqual(marked_span(marked), "あまりの暑(あつ)さに")
+        self.assertEqual(marked_spans(marked), ["あまりの", "に"])
+
+    def test_a_split_pattern_marks_each_piece_and_nothing_between(self) -> None:
+        """메모가 짚은 고장 — ``たり`` 사이의 말이 통째로 강조됐다.
+
+        ``読んだり`` 의 ``だり`` 는 연탁이라, 이것을 허용하지 않았을 때는 기계적 매칭이
+        아예 실패해 모델이 준 연속 구간이 그대로 들어왔다.  ``する`` 는 어간이 바뀌므로
+        (``します``) 가나를 이어 붙이는 것만으로도 닿지 않는다.
+        """
+        annotated = ("日(にち)曜(よう)日(び)には、本(ほん)を読(よ)んだり、"
+                     "テレビを見(み)たりします。")
+        marked, method = mark(annotated, "たり～たりする",
+                              connect=["Ｖたり ＋ Ｖたり ＋ する"])
+        self.assertEqual(marked_spans(marked), ["だり", "たりします"])
+        self.assertEqual(method, "inflected/plain")
+        self.assertEqual(marked.replace(MARK, ""), annotated)
+
+    def test_a_repeated_pattern_survives_the_light_verb_being_dropped(self) -> None:
+        """원전은 ``する`` 를 적어 두었지만 예문에서는 생략되는 일이 있다."""
+        marked, method = mark("暑(あつ)かったり寒(さむ)かったりですから", "たり～たりする")
+        self.assertEqual(marked_spans(marked), ["たり", "たり"])
+        self.assertEqual(method, "repeat/plain")
+
+    def test_the_headword_is_not_taken_from_inside_a_word(self) -> None:
+        """메모가 짚은 고장 — ``冷たい`` 의 ``たい`` 에 강조가 붙었다.
+
+        형태만으로는 ``冷たい`` 와 ``見たい`` 를 가를 수 없다.  둘 다 한자 한 자에
+        ``たい`` 가 붙었다.  ``冷たい`` 가 사전에 실린 한 낱말이라는 사실만이 가른다.
+        """
+        annotated = "ああ、暑(あつ)い。冷(つめ)たいビールが飲(の)みたいなあ。"
+        lexicon = Lexicon(written={"冷たい"})
+        marked, _ = mark(annotated, "たい", connect=["V ます ＋ たい"],
+                         lexicon=lexicon)
+        self.assertEqual(marked,
+                         "ああ、暑(あつ)い。冷(つめ)たいビールが飲(の)み*たい*なあ。")
+
+    def test_without_a_lexicon_nothing_crashes(self) -> None:
+        """코퍼스는 저장소에 없다.  목록이 비어도 표시는 돌아가야 한다."""
+        marked, method = mark("夏(なつ)の間(あいだ)、ずっと", "あいだ")
+        self.assertEqual(method, "exact/reading")
+        self.assertEqual(marked_spans(marked), ["間(あいだ)"])
+
+    def test_model_pieces_land_in_order(self) -> None:
+        """같은 조각이 두 번 나오는 문형은 순서대로 집어야 제자리를 찾는다."""
+        annotated = "本(ほん)を読(よ)んだり、テレビを見(み)たりします。"
+        marked, method = mark_with_spans(annotated, ["だり", "たりします"])
+        self.assertEqual(method, "model")
+        self.assertEqual(marked_spans(marked), ["だり", "たりします"])
+        self.assertEqual(marked.replace(MARK, ""), annotated)
+
+    def test_the_connect_column_carries_the_other_forms(self) -> None:
+        """원전은 표제형을 대표 꼴 하나로 싣지만 접속형 칸에는 전부 적어 둔다.
+
+        이것을 읽지 않아 ``…していきます``·``飲んだら…ました`` 가 끝내 표시되지 못했다.
+        """
+        self.assertEqual(
+            marking.connect_forms(["Ｖて ＋ くる Ｖて ＋ いく"], [["てくる"]]),
+            [["ていく"]])
+        self.assertEqual(
+            marking.connect_forms(["V ると ＋ ～た V たら ＋ ～た"], [["と", "た"]]),
+            [["たら", "た"]])
+        self.assertEqual(
+            marking.connect_forms(["Ｖる＋こと／Ｎ ＋ ができる"], [["ことができる"]]),
+            [["ができる"]])
+
+    def test_an_annotation_never_leaks_into_a_form(self) -> None:
+        """``普通形（ナＡな／Ｎな）`` 의 괄호 안에도 대안 구분자가 있다.
+
+        괄호를 나중에 걷으면 쪼가리가 리터럴로 새어 나온다.
+        """
+        self.assertEqual(
+            marking.connect_forms(["普通形（ナＡな／Ｎな） ＋ のですか"], [["のですか"]]),
+            [])
+
+    def test_a_connect_form_is_only_the_last_resort(self) -> None:
+        """접속형에서 뽑은 꼴은 **표제형이 닿지 못한 예문에만** 쓴다.
+
+        리터럴만 주워 온 것이라 문형의 알맹이가 빠질 수 있어(``ようとする`` -> ``とする``),
+        앞에 세우면 멀쩡한 표시를 더 나쁜 것으로 바꾼다.
+        """
+        annotated = "中(ちゅう)国(ごく)語(ご)を勉(べん)強(きょう)していきます。"
+        connect = ["Ｖて ＋ くる Ｖて ＋ いく"]
+        self.assertIsNone(mark(annotated, "てくる", connect=connect)[1])
+        marked, method = marking.mark_from_connect(
+            annotated, "てくる", connect=connect)
+        self.assertEqual(method, "connect-inflected/plain")
+        self.assertEqual(marked_spans(marked), ["ていきます"])
+
+    def test_a_hallucinated_piece_is_refused(self) -> None:
+        annotated = "夏(なつ)の間(あいだ)、"
+        marked, method = mark_with_spans(annotated, ["間(あいだ)", "ありもしない"])
+        self.assertIsNone(method)
+        self.assertEqual(marked, annotated)
 
     def test_unmatched_headword_leaves_the_text_alone(self) -> None:
         marked, method = mark("まったく別(べつ)の文(ぶん)です。", "ぬきにして")

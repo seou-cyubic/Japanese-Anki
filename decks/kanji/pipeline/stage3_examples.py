@@ -18,6 +18,7 @@ import sys, os
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import paths
 import fuhyo
+import notes as joyo_notes
 import re
 import json
 import gzip
@@ -539,6 +540,25 @@ for k, rd in result.items():
     data[k]["readings"] = rd
 for k in data:
     data[k]["except"] = except_map.get(k, {})
+
+# ================= 備考 =================
+# 이 칸은 지금까지 **용례를 캐는 데에만** 쓰였고 나머지는 버려졌다.  버려진 것 안에
+# 표의 다른 어디에도 없는 읽기가 들어 있다 — 「観音」は，「カンノン」。 가 그것이다.
+# `notes.py` 가 종류별로 갈라 주고, 모르는 모양을 만나면 그 자리에서 선다.
+#
+# **나온 것은 `note` 필드에만 넣는다.**  `readings`·`except` 는 건드리지 않으므로
+# 備考 가 용례로 새어 들어갈 자리가 아예 없다.
+note_count = Counter()
+for k in data:
+    got = joyo_notes.collect(k, joyo_note_rows.get(k, []))
+    if not got:
+        data[k].pop("note", None)
+        continue
+    data[k]["note"] = got
+    for entry in got:
+        note_count[entry["kind"]] += 1
+print("備考:", dict(note_count), "| note 를 가진 한자:",
+      sum(1 for v in data.values() if v.get("note")))
 
 empty_all = [(k, r) for k, v in data.items() for r, w in v["readings"].items() if not w]
 print("빈 용례 읽기:", len(empty_all))

@@ -4,9 +4,13 @@
 한 요미카타 안의 용례는 다음 순서로 놓인다.
 
 1. 한자 길이 오름차순            (표기 ``w`` 의 코드포인트 수)
-2. 한국어 뜻 길이 오름차순        (``ko``)
+2. 한국어 뜻 길이 오름차순        (``ko`` 의 **첫 뜻**)
 3. 후리가나 길이 오름차순         (``ja`` 에서 복원한 전체 읽기)
 4. 한국어 뜻 가나다순             (완성형 한글은 코드포인트 순서가 곧 사전순)
+
+뜻이 여럿인 용례가 있으므로(``ko`` 는 줄바꿈으로 뜻을 가른다) 2·4 는 **첫 뜻**만
+본다.  뜻이 둘인 용례가 그 사실만으로 뒤로 밀리면 순서가 뜻의 개수를 따라가 버린다 —
+순서는 표기와 대표 뜻의 성질이어야 한다.
 
 파이프라인 마지막 단계와 편집기 저장 경로 양쪽에서 호출한다.  그래야 사람이
 용례를 새로 넣어도 순서가 무너지지 않는다.
@@ -48,13 +52,22 @@ def furigana_length(example):
     return total
 
 
+def first_sense(korean_meaning):
+    """대표 뜻.  ``ko`` 는 줄바꿈으로 뜻을 가른다(``decks/kanji/model.py``)."""
+    for line in str(korean_meaning or "").split("\n"):
+        if line.strip():
+            return line.strip()
+    return ""
+
+
 def example_sort_key(example):
     # '한자 길이' 는 후리가나를 뺀 원 표기의 길이다.
+    meaning = first_sense(example.get("ko"))
     return (
         len(plain_surface(example.get("w") or "")),
-        len(example.get("ko") or ""),
+        len(meaning),
         furigana_length(example),
-        example.get("ko") or "",
+        meaning,
     )
 
 

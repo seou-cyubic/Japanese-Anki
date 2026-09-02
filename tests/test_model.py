@@ -62,17 +62,18 @@ class ProductionContractTest(unittest.TestCase):
 
     def test_exception_is_not_a_reading_example_bucket(self) -> None:
         record = self.payload["衣"]
-        self.assertEqual(
-            record["except"],
-            {"ゆかた": [{"w": "浴衣(ゆかた)", "ko": "유카타, 여름용 홑옷 기모노"}]},
-        )
+        # 잠그는 것은 **어느 키 아래 어느 표기가 오는가** 다.  뜻 문자열은 모델이 내는
+        # 것이라 다시 받으면 달라질 수 있고, 그것은 이 시험의 주제가 아니다.
+        self.assertEqual(list(record["except"]), ["ゆかた"])
+        self.assertEqual([example["w"] for example in record["except"]["ゆかた"]],
+                         ["浴衣(ゆかた)"])
         self.assertNotIn("ゆかた", record["readings"])
 
     def test_exception_key_is_the_whole_word_reading(self) -> None:
         """예외 키는 한자 하나가 지는 조각이 아니라 단어 전체의 요미가나다."""
         self.assertEqual(
-            self.payload["生"]["except"]["やよい"],
-            [{"w": "弥生(やよい)", "ko": "음력 3월"}],
+            [example["w"] for example in self.payload["生"]["except"]["やよい"]],
+            ["弥生(やよい)"],
         )
         self.assertNotIn("よい", self.payload["生"]["except"])
 

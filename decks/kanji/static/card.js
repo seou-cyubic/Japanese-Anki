@@ -142,6 +142,11 @@
   /* design_sample keeps Katakana readings as Katakana. */
   const displayReading = (rawKey) => rawKey;
 
+  /* 용례의 뜻을 **뜻 하나씩**으로 가른다.  가르는 것은 줄바꿈 하나뿐이다 —
+   * 쉼표와 가운뎃점은 한 뜻 안의 글자다(`decks/kanji/model.py` 의 `senses`). */
+  const senses = (korean) => String(korean || '')
+    .split('\n').map((line) => line.trim()).filter(Boolean);
+
   /* 후리가나는 표기 안에 실린다.  반각 (…) 만 생성분이므로 그것만 걷으면 원 표기다.
    * 전각 （…） 는 원전 인쇄분이라 표기의 일부로 남는다. */
   const plainSurface = (annotated) => {
@@ -355,8 +360,10 @@
 
   function sortExamples(examples) {
     return [...examples].sort((left, right) => {
-      const leftKo = left.ko || '';
-      const rightKo = right.ko || '';
+      /* 뜻이 여럿인 용례가 있으므로 견주는 것은 **첫 뜻**이다.  뜻이 둘이라는 이유로
+       * 뒤로 밀리면 순서가 뜻의 개수를 따라가 버린다 — `pipeline/ordering.py` 와 같다. */
+      const leftKo = senses(left.ko)[0] || '';
+      const rightKo = senses(right.ko)[0] || '';
       return [...plainSurface(left.w || '')].length
           - [...plainSurface(right.w || '')].length
         || [...leftKo].length - [...rightKo].length
@@ -526,11 +533,43 @@
     return box;
   }
 
+  /* 뜻이 여럿인 용례는 **앞면에서도** 그 사실이 보여야 한다.
+   *
+   * 뜻을 갈라 놓고 뒷면에만 번호를 붙이면, 앞면에서는 뜻이 하나인 용례와 구별되지
+   * 않아 '무엇을 몇 개 떠올려야 하는가' 를 알 수 없다.  그래서 개수만 용례 옆에
+   * 작게 붙인다 — **`reveal-` 접두사를 붙이지 않는다.**  그 접두사가 붙은 것은
+   * 앞면에서 `opacity: 0` 이 되는 정답 쪽이고(card.css), 이 숫자는 정답이 아니라
+   * 문제의 일부다. */
+  function senseCount(count) {
+    const badge = node('span', 'sense-count', String(count));
+    badge.setAttribute('aria-label', `뜻 ${count}개`);
+    return badge;
+  }
+
+  /* 뒷면의 뜻.  하나면 그대로, 여럿이면 번호를 붙여 줄마다 나눈다. */
+  function meaningBlock(lines) {
+    const box = node('div', 'meaning reveal-meaning');
+    if (lines.length <= 1) {
+      box.textContent = lines[0] || '';
+      return box;
+    }
+    lines.forEach((line, index) => {
+      const row = node('div', 'meaning-sense');
+      row.append(node('span', 'sense-no', `${index + 1}.`));
+      row.append(node('span', 'sense-text', line));
+      box.append(row);
+    });
+    return box;
+  }
+
   function previewExample(example, options) {
     const word = node('div', 'word');
-    word.append(previewSpell(example, options));
+    const lines = senses(example.ko);
+    const spell = previewSpell(example, options);
+    if (lines.length > 1) spell.append(senseCount(lines.length));
+    word.append(spell);
     if (options.revealMeanings) {
-      word.append(node('div', 'meaning reveal-meaning', example.ko));
+      word.append(meaningBlock(lines));
     }
     return word;
   }
@@ -603,12 +642,57 @@
       korean: record.korean || {},
       variant: record.variant || {},
       except: record.except || {},
+      note: record.note || [],
       readings: Object.keys(readings).map((rawKey) => ({
         rawKey,
         examples: readings[rawKey],
         group: rawKey === '' ? (extra.draftReadingGroup || null) : groupOfKey(rawKey)
       }))
     };
+  }
+
+  /* 常用漢字表 본표의 **備考 칸**.
+   *
+   * 표의 다른 어디에도 없는 읽기가 여기 들어 있다 — `観音` 을 `カンノン` 으로 읽는다는
+   * 사실은 備考 에만 적혀 있다.  용례가 아니므로 요미카타 칸에 섞지 않고, 카드 아래에
+   * 따로 한 줄씩 놓는다(`decks/kanji/pipeline/notes.py`).
+   *
+   * 정답 쪽이므로 `reveal-` 계열이다 — 앞면에서는 보이지 않는다. */
+  const NOTE_LABELS = {
+    special_reading: '특별한 읽기',
+    also_read: '이렇게도 읽는다',
+    also_reading: '이렇게도 읽는다',
+    also_written: '이렇게도 적는다',
+    same_kun: '같은 훈의 다른 한자',
+    text: '비고'
+  };
+
+  function noteLine(entry) {
+    const row = node('div', `kc-note-row note-${entry.kind}`);
+    row.append(node('span', 'kc-note-of', entry.of || ''));
+    row.append(node('span', 'kc-note-kind', NOTE_LABELS[entry.kind] || entry.kind));
+    const body = node('span', 'kc-note-body');
+    if (entry.kind === 'same_kun') {
+      body.textContent = (entry.words || []).join(' · ');
+    } else if (entry.kind === 'text') {
+      body.textContent = entry.body || '';
+    } else if (entry.kind === 'also_reading') {
+      body.textContent = entry.reading || '';
+    } else {
+      const word = node('span', 'kc-note-word');
+      word.textContent = entry.word || '';
+      body.append(word);
+      body.append(node('span', 'kc-note-value',
+        entry.reading || entry.written || ''));
+    }
+    row.append(body);
+    return row;
+  }
+
+  function noteBlock(entries) {
+    const box = node('div', 'kc-notes reveal-meaning');
+    for (const entry of entries) box.append(noteLine(entry));
+    return box;
   }
 
   function render(note, options = {}) {
@@ -626,6 +710,7 @@
     }
     card.append(head);
     card.append(readingGrid(note, cardOptions));
+    if ((note.note || []).length) card.append(noteBlock(note.note));
     return card;
   }
 

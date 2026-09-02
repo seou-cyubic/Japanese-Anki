@@ -89,8 +89,8 @@ https://www.newgeneralservicelist.com/s/TSL_12_lemmatized_for_teaching.csv
 
 | 덱 | 최종 산출물 | 크기 | 무엇이 들었나 |
 |---|---|---|---|
-| 한자 | `data_japanese.json` | ~1.9 MB | 한자 3,012 · 요미카타 4,862 · 용례 11,910 · 이체자 391 |
-| 문법 | `bunpo_korean.json` | ~1.9 MB | 문형 631 · 예문 2,520 · 번역 2,520 · 문법 구간 표시 2,492 |
+| 한자 | `data_japanese.json` | ~1.9 MB | 한자 3,012 · 요미카타 4,862 · 용례 11,910 · 이체자 391 · 備考 459 |
+| 문법 | `bunpo_korean.json` | ~1.9 MB | 문형 631 · 예문 2,520 · 번역 2,520 · 문법 구간 표시 2,511 |
 | 토익 | `toeic_japanese.json` | ~3.8 MB | 낱말 4,059 · 뜻 6,423 · 예문 6,327 쌍 |
 
 `data/cache.json` 은 모델 응답 캐시다. 있으면 두 번째 실행부터 신규 호출이 거의
@@ -128,6 +128,10 @@ python -m app serve                               # 편집기 http://127.0.0.1:8
 
 python -m app check --deck kanji                  # 데이터·편집 overlay 전수 검증
 python -m app materialize --deck kanji --output <경로>   # base+overlay 완성본
+
+python decks/kanji/pipeline/audit_meanings.py     # 용례 뜻 전건 감사 (모델 안 부름)
+python decks/bunpo/pipeline/audit_marks.py        # 문법 구간 표시 전건 감사 (모델 안 부름)
+python decks/toeic/pipeline/audit_examples.py     # 예문 두 문장이 같은 말인지 표본 감사
 ```
 
 스테이지 스크립트는 **import 하면 실행을 거절한다** — 읽히는 것만으로 원전을 다시
@@ -139,7 +143,7 @@ Anki 연동에는 **AnkiConnect 애드온(코드 `2055492159`)** 이 필요하�
 시험:
 
 ```
-python -m unittest discover -s tests -t .     # 197 tests
+python -m unittest discover -s tests -t .     # 239 tests
 node tests/test_card.mjs                      # 렌더러 계약 + Anki 카드 면
 ```
 
@@ -175,7 +179,11 @@ tests/        전 계약 검증
 |---|---|
 | 후리가나를 표기 안에 싣는 주석 문법 (`空港(くうこう)`) | `shared/furigana.py` |
 | 원전 PDF 를 글꼴과 좌표로 갈라내는 법 | `decks/*/pipeline/stage1_*.py` |
-| 예문에서 문법이 쓰인 구간을 찾는 두 단계 | `decks/bunpo/pipeline/marking.py` |
+| 용례의 뜻이 요미카타마다 갈리는 이유, 뜻의 경계가 줄바꿈인 이유 | `decks/kanji/pipeline/stage4_translate.py` |
+| 常用漢字表 備考 칸을 종류별로 가르는 법, 모르는 모양에서 서는 이유 | `decks/kanji/pipeline/notes.py` |
+| 예문에서 문법이 쓰인 구간을 찾는 두 단계, 여러 조각으로 떨어져 실현되는 문형 | `decks/bunpo/pipeline/marking.py` |
+| 표시가 낱말 한가운데인지 가르는 사전 목록 (`冷たい` 의 `たい`) | `decks/bunpo/pipeline/lexicon.py` |
+| 접속형 칸에 실린 대체 표제형을 읽어 내는 법 (`てくる` → `ていく`) | `decks/bunpo/pipeline/marking.py` 의 `connect_forms` |
 | 덱 하나가 서버·저장소·Anki 에 내놓는 계약 | `shared/deckspec.py`, `decks/*/deck.py` |
 | 동기화가 덮어쓰기가 아니라 대조인 이유, 학습 정보를 지키는 법 | `shared/anki.py` |
 | 카드 앞뒤가 클래스 하나로 갈리는 구조 | `decks/*/static/card.js`·`card.css` |

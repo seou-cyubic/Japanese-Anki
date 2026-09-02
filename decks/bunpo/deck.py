@@ -51,23 +51,36 @@ def subdeck(level_label: str, group: str) -> str:
     return f"{ANKI_DECK}::{group}::{leaf}"
 
 
-def split_marked(marked: str) -> tuple[str, str, str]:
-    """``앞*문법*뒤`` 를 셋으로 가른다.  표시가 없으면 가운데가 빈다."""
-    parts = marked.split(MARK)
-    if len(parts) >= 3:
-        return parts[0], parts[1], MARK.join(parts[2:])
-    return marked, "", ""
+def marked_spans(marked: str) -> list[str]:
+    """표시된 예문에서 문법 조각들.
+
+    **조각은 하나가 아니다.**  ``たり～たりする`` 처럼 표제형 가운데가 비어 있는 문형은
+    문장 안에서 떨어져 실현되고, 그 사이에 낀 말은 문법이 아니다 — 그래서 별표는
+    짝수 개이고 조각마다 한 쌍이 붙는다.  ``split`` 한 뒤 홀수 번째가 문법이다.
+    ``static/card.js`` 의 ``splitMarks`` 와 같은 가름이다.
+    """
+    parts = str(marked or "").split(MARK)
+    if len(parts) < 3:
+        return []
+    return [piece for piece in parts[1::2] if piece]
+
+
+def marked_grammar(marked: str) -> str:
+    """문법 조각들을 이어 붙인 것.  검색 색인처럼 문자열 하나가 필요한 자리에 쓴다."""
+    return "".join(marked_spans(marked))
 
 
 def mark_offsets(marked: str) -> list[int]:
-    """표시를 걷어 낸 예문 기준으로 두 별표가 놓인 자리."""
-    first = marked.find(MARK)
-    if first < 0:
-        return []
-    second = marked.find(MARK, first + 1)
-    if second < 0:
-        return []
-    return [first, second - 1]
+    """표시를 걷어 낸 예문 기준으로 별표들이 놓인 자리.
+
+    ``n`` 번째 별표는 앞서 걷어 낸 별표 ``n`` 개만큼 왼쪽으로 당겨진다.
+    """
+    offsets = []
+    position = marked.find(MARK)
+    while position >= 0:
+        offsets.append(position - len(offsets))
+        position = marked.find(MARK, position + 1)
+    return offsets
 
 
 def group_edges(annotated: str) -> set[int]:
@@ -192,11 +205,11 @@ def validate_record(key: str, record) -> list[str]:
         if not example.get("ja"):
             errors.append(f"{spot}: 예문이 비었다")
         marked = example.get("marked", "")
-        if marked.count(MARK) not in (0, 2):
+        if marked.count(MARK) % 2:
             errors.append(f"{spot}: 문법 표시가 짝을 이루지 않는다")
         if marked and marked.replace(MARK, "") != example.get("ja", ""):
             errors.append(f"{spot}: 표시를 걷으면 예문이 그대로 나와야 한다")
-        elif marked.count(MARK) == 2:
+        elif marked.count(MARK) >= 2:
             # **별표는 한자와 그 읽기 사이에 놓일 수 없다.**  ``*後*(あと)`` 처럼
             # 덩이 가운데를 끊으면 읽기가 걸릴 글자를 잃어 화면에서 허공에 뜬다.
             edges = group_edges(example.get("ja", ""))
@@ -242,7 +255,7 @@ def index_row(key: str, record: dict) -> dict:
         terms.append((shape, "connect", "접속형"))
     for example in record["examples"]:
         marked = example.get("marked") or example["ja"]
-        _b, grammar, _a = split_marked(marked)
+        grammar = marked_grammar(marked)
         terms.append((plain_of(example["ja"]), "example", "예문"))
         terms.append((example["ja"], "annotation", "예문"))
         if example.get("ko"):
@@ -291,11 +304,13 @@ def project_record(key: str, record: dict, *, edited: bool) -> dict:
     examples = []
     for position, example in enumerate(record.get("examples", []), 1):
         marked = example.get("marked") or example.get("ja", "")
-        _before, grammar, _after = split_marked(marked)
+        spans = marked_spans(marked)
+        grammar = "".join(spans)
         examples.append({
             **example,
             "position": position,
             "span": grammar,
+            "spans": spans,
             "span_plain": plain_of(grammar),
             "plain": plain_of(example.get("ja", "")),
         })

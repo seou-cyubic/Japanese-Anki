@@ -99,6 +99,15 @@ class Cache:
     def __setitem__(self, key: str, value: Any) -> None:
         self.slot[key] = value
 
+    def __delitem__(self, key: str) -> None:
+        """답을 무를 수 있어야 한다.
+
+        캐시는 '다시 묻지 않기 위한 것' 이지 '옛 답을 지키기 위한 것' 이 아니다.
+        판정 규칙을 고쳤는데 그 규칙에 걸리는 옛 답이 캐시에 남아 있으면, 고침이
+        데이터에 영영 닿지 못한다.  버릴 수 있어야 다시 물을 수 있다.
+        """
+        self.slot.pop(key, None)
+
     def get(self, key: str, default: Any = None) -> Any:
         return self.slot.get(key, default)
 
