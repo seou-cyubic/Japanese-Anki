@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import sys
 import unittest
 from collections import Counter
 from pathlib import Path
@@ -17,6 +18,9 @@ ROOT = Path(__file__).resolve().parents[1]
 
 from tests import load  # noqa: E402
 
+sys.path.insert(0, str(ROOT / "decks" / "kanji" / "pipeline"))
+import meanings  # noqa: E402
+
 
 class PipelineOutputTest(unittest.TestCase):
     @classmethod
@@ -27,8 +31,16 @@ class PipelineOutputTest(unittest.TestCase):
         model_cache = cache["gemini-3.7-flash"]
         # 뜻은 이제 표기가 아니라 **(한자, 요미카타, 표기)** 에 붙는다.  표기 하나에
         # 답 하나였던 옛 칸(``word_ko``)으로는 ``音(おと)`` 와 ``音(ね)`` 를 가를 수 없었다.
-        cls.word_cache = model_cache["word_ko_v2"]
+        cls.word_cache = model_cache["word_ko_v3"]
         cls.furigana_cache = model_cache["furigana"]
+        # 뜻은 **두 번** 물어 나온다 — 1 패스가 초안을 짓고 2 패스가 감수한다.
+        # 카드에 실리는 것은 감수본이고, 감수를 못 받은 자리에서만 초안이다.
+        # 그 규칙은 ``pipeline/meanings.py`` 한 곳에만 있고 시험도 그것을 쓴다.
+        cls.review_cache = cache.get("gemini-3.1-pro-preview", {}).get(
+            "word_ko_review_v1", {})
+        # 3 패스.  한 낱말이 여러 한자 카드에 실릴 때 뜻이 어긋나면 다시 답한 것이다.
+        cls.agree_cache = cache.get("gemini-3.1-pro-preview", {}).get(
+            "word_ko_agree_v1", {})
 
     def test_stage5_only_adds_furigana_to_every_example(self) -> None:
         self.assertEqual(self.translated.keys(), self.japanese.keys())
@@ -66,8 +78,11 @@ class PipelineOutputTest(unittest.TestCase):
                         if bucket == "except":
                             self.assertTrue(reading_matches(parsed, reading))
                         surface = plain_surface(japanese["w"])
-                        cached = self.word_cache[f"{character}|{reading}|{surface}"]
-                        self.assertEqual("\n".join(cached["ko"]), japanese["ko"])
+                        key = f"{character}|{reading}|{surface}"
+                        expected = meanings.final_ko(
+                            key, self.word_cache[key]["ko"],
+                            self.review_cache, self.agree_cache)
+                        self.assertEqual("\n".join(expected), japanese["ko"])
                         self.assertEqual(
                             self.furigana_cache[f"{surface}|{reading}"],
                             japanese["w"],
@@ -87,7 +102,10 @@ class PipelineOutputTest(unittest.TestCase):
             for reading in record["readings"]
         )
         self.assertNotIn(None, groups)
-        self.assertEqual(groups, {"on": 3202, "kun": 784, "verb": 876})
+        # 활용 칸에서 훈독으로 옮겨 온 아홉 — 수사 넷(``みつ``·``よつ``·``むつ``·``やつ``)과
+        # 명사 다섯(``たがい``·``さいわい``·``わざわい``·``いきおい``·``たぐい``) 이다.
+        # 끝소리 모양만 활용을 닮았을 뿐 활용하지 않는다(``stage3_reading_keys.py``).
+        self.assertEqual(groups, {"on": 3202, "kun": 793, "verb": 867})
 
     def test_inflection_key_is_the_actual_kanji_reading(self) -> None:
         readings = self.japanese["生"]["readings"]

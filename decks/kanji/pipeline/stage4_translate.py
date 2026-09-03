@@ -22,9 +22,26 @@
 글자도 없었다.  그것은 규약이 아니라 모델의 그때그때의 습관이었고, 세미콜론의 절반
 가까이(393 건 중 182 건)는 다른 뜻이 아니라 앞 낱말의 우리말 풀이였다
 (``역내; 구역의 안``).  반대로 쉼표 쪽에는 명백히 다른 뜻이 들어 있었다
-(``눈알, 안구, (비유) 주요 상품``).  그래서 그 둘을 해석하는 대신 **규약을 프롬프트에
+    "     '눈알, 안구, (비유) 주요 상품'  -> [\"눈알\", \"주요 상품\"]\n"
 못박아 다시 받는다** — 뜻이 다르면 배열의 원소로 나누고, 같은 뜻의 유의어·풀이는
 대표 하나로 합친다.  저장할 때 원소를 줄바꿈으로 잇는다(``decks/kanji/model.py``).
+
+**한 번 물어서는 안 됐다 — 그래서 두 번 묻는다.**
+
+1 패스는 뜻을 짓는다.  짓는 일이 지배적이라 같은 호출에서 "동의어를 합쳐라"·"한자음을
+거르라"·"괄호를 풀어라" 를 함께 시키면 그쪽이 밀린다.  프롬프트를 조이는 것으로는
+되지 않았다 — 규칙을 아홉까지 늘려 전건 11,910 을 다시 물었는데, 뜻이 여럿인 용례가
+3,521 에서 3,343 으로 5% 줄었을 뿐이었다.  표본을 손으로 재 보면 남은 것의 절반쯤이
+여전히 한 뜻이다(``그릇 / 용기``, ``사흘 / 3일``).
+
+2 패스는 짓지 않는다.  **이미 나온 답을 놓고 세 가지만 본다** — 원소가 서로 다른
+말인가, 한국어로 자연스러운가(``休止`` 의 뜻은 "휴지" 가 아니다), 괄호가 남았는가.
+지어낼 일이 없으니 판단이 밀릴 자리도 없다.
+
+기계로 잴 수 있는 것은 모델에게 맡기지 않는다.  괄호는 ``clean()`` 이 **거부**하므로
+캐시에 굳지 않고 다음 실행이 다시 묻는다.  "두 뜻이 같은 말인가" 는 잴 수 없어서
+2 패스가 필요하고, "뜻이 그 낱말의 한국 한자음 그대로인가" 는 잴 수 있어서
+``pipeline/audit_meanings.py`` 가 그 자리를 정확히 세어 준다.
 
 받은 답이 규약을 어기면 **캐시에 넣지 않는다.**  다시 돌리면 그것만 다시 묻고, 끝까지
 채워지지 않으면 마지막에 선다.  틀린 답을 캐시에 굳히는 것보다 다시 묻는 편이 싸다.
@@ -46,16 +63,16 @@ sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")
 import sys, os
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import paths
+from meanings import MAX_SENSES, agree_key, clean, final_ko, review_key
 import re
 import json
 import time
 from concurrent.futures import ThreadPoolExecutor
 
-from shared.gemini import Cache, Gemini, chunk, dump_json_atomic
+from shared.gemini import MODEL, Cache, Gemini, chunk, dump_json_atomic
 
 BATCH = 60                 # 한 번에 묻는 용례 수
 WORKERS = 4                # 동시에 띄우는 호출 수
-MAX_SENSES = 3             # decks/kanji/model.py 의 계약과 같은 값이다
 
 PROMPT = (
     "너는 일본어-한국어 사전 편찬자다. 아래 항목마다 그 낱말의 한국어 뜻을 사전체로 짧게 쓴다.\n\n"
@@ -82,48 +99,48 @@ PROMPT = (
     "     '오른쪽; 우측'         -> [\"오른쪽\"]\n"
     "     '날카롭다; 예리하다'    -> [\"날카롭다\"]\n"
     "     '더럽히다, 오염시키다'  -> [\"더럽히다\"]\n"
+    "5-1. **원소를 둘 이상 쓰기 전에 스스로 물어라 — '이 둘을 한국어 사전에서 서로의\n"
+    "   뜻풀이로 써도 되는가?' 된다면 한 뜻이다.** 다음은 전부 한 뜻이고, 자주 틀리는 자리다.\n"
+    "     고유어와 한자어     '사흘, 3일'       -> [\"사흘\"]   세는 말이 다를 뿐 같은 날수다\n"
+    "     같은 뜻의 두 한자어  '여성, 여자'      -> [\"여자\"]\n"
+    "     같은 뜻의 두 동사    '자라다, 성장하다' -> [\"자라다\"]\n"
+    "5-2. **한자를 한국 한자음으로 그대로 읽은 것은 뜻이 아니다.** 그렇게 읽은 말이\n"
+    "   한국어에서 **바로 그 뜻으로 흔히 쓰일 때만** 그 말을 쓴다.\n"
+    "     人口  ->  \"인구\"        한국어에서 그 뜻으로 그대로 쓰인다.  이대로 둔다\n"
+    "     悪事  ->  \"나쁜 짓\"      '악사' 는 그 뜻으로 쓰이지 않는다\n"
+    "     休止  ->  \"멈춤\"        '휴지' 는 한국어에서 화장실 휴지를 먼저 뜻한다\n"
+    "     胃弱  ->  \"위가 약함\"\n"
+    "   **한자음을 한국어 뜻과 나란히 적지 않는다.** 하나만 고른다.\n"
+    "     '의미, 뜻' -> [\"의미\"]     '광음, 세월' -> [\"세월\"]\n"
+    "5-3. **한국어로 읽어서 어색하면 쓰지 않는다.** 한자에서 왔든 아니든 마찬가지다.\n"
+    "   스스로 물어라 — '한국 사람에게 이 낱말을 설명할 때 내가 이 말을 쓰겠는가?'\n"
+    "   쓰지 않을 말이면, 그 뜻을 한국어로 다시 적는다.\n"
+    "     - 한국어에 없는 말                    '역병신' -> \"불행을 몰고 오는 사람\"\n"
+    "     - 있지만 다른 뜻으로 더 흔한 말        '휴지' -> \"멈춤\"\n"
+    "     - 일본어 한자어를 옮기기만 한 말        '외포' -> \"두려워함\"\n"
     "6. 의미가 다른 것은 반드시 나눈다.\n"
-    "     '눈알, 안구, (비유) 주요 상품'  -> [\"눈알\", \"(비유) 주요 상품\"]\n"
+    "     '눈알, 안구, (비유) 주요 상품'  -> [\"눈알\", \"주요 상품\"]\n"
     "     '담당(자), 걸이, 외상 거래'     -> [\"담당자\", \"걸이\", \"외상 거래\"]\n"
     "7. **원소 하나 안에서 쉼표(,)·세미콜론(;)·가운뎃점(·)·빗금(/)을 뜻을 가르는 구분자로\n"
     "   쓰지 않는다.** 뜻을 가르는 것은 오직 배열의 원소다.\n"
-    "   문법·용법을 밝히는 괄호는 원소 안에 남겨도 된다 — \"(잔을) 비우다\", \"(비유) 주요 상품\".\n"
-    "8. 고유명사는 '고유명사' 임을 밝히거나 원어 표기를 유지한다.\n\n"
+    "   괄호도 구분자로 쓰지 않는다 — 아래 8 을 따른다.\n"
+    "8. **괄호를 쓰지 않는다.** 괄호는 뜻을 적다 만 자리다 — 읽는 쪽은 괄호 밖만 뜻으로\n"
+    "   받아 들이므로, 괄호에 담긴 것은 전달되지 않는다.\n"
+    "   괄호 안의 말이 **없으면 뜻이 서지 않는다면** 괄호를 풀어 한 마디로 잇는다.\n"
+    "   그 정도가 아니면 괄호를 통째로 버린다.\n"
+    "     '(초밥 등을) 빚다'        -> \"초밥을 빚다\"      풀어야 뜻이 선다\n"
+    "     '(사정에) 어둡다'         -> \"사정에 어둡다\"\n"
+    "     '(명령 등이) 내려지다'     -> \"명령이 내려지다\"\n"
+    "     '에히메 (일본의 현 이름)'  -> \"일본 에히메현\"\n"
+    "     '(비유) 주요 상품'        -> \"주요 상품\"        표지가 없어도 뜻이 선다\n"
+    "     '담당(자)'               -> \"담당자\"\n"
+    "   괄호를 풀었더니 앞 원소와 같은 말이 되면, 그것은 애초에 나눌 것이 아니었다(5-1).\n"
+    "9. 고유명사는 '고유명사' 임을 밝히거나 원어 표기를 유지한다.\n\n"
     "[출력]\n"
     "{\"results\": [{\"i\": 입력번호, \"ko\": [\"뜻\", ...], \"why\": \"이 요미카타를 같은 표기의 다른\n"
     "요미카타와 가르는 한 마디. 가를 것이 없으면 빈 문자열\"}]}\n"
     "JSON 객체 하나뿐이다. 설명 금지.\n\n"
 )
-
-
-def top_level_semicolon(value):
-    """괄호 밖의 세미콜론.  ``일위(계급의 하나; 대위)`` 의 것은 경계가 아니다."""
-    depth = 0
-    for character in value:
-        if character in "(（[［":
-            depth += 1
-        elif character in ")）]］":
-            depth = max(0, depth - 1)
-        elif character == ";" and depth == 0:
-            return True
-    return False
-
-
-def clean(answer):
-    """모델이 낸 것을 계약대로 다듬는다.  규약을 어기면 None — 캐시에 넣지 않는다."""
-    if isinstance(answer, str):
-        answer = [answer]
-    if not isinstance(answer, list):
-        return None
-    lines = []
-    for piece in answer:
-        text = str(piece).strip().rstrip(".").strip()
-        if not text or "\n" in text or top_level_semicolon(text):
-            return None
-        lines.append(text)
-    if not lines or len(lines) > MAX_SENSES:
-        return None
-    return lines
 
 
 # ---------- 한국 훈음 힌트 ----------
@@ -186,7 +203,12 @@ for kanji, v in data.items():
                     "k": kanji, "rd": rd, "w": w,
                     "hint": f"{kanji}={hint}" if hint else ""})
 
-cache = Cache(paths.CACHE, "word_ko_v2")
+# 이름칸이 ``v3`` 인 것은 **규약을 고쳤기 때문이다.**  ``v2`` 의 답에는 나누지 말았어야
+# 할 것이 나뉘어 있었다 — ``사흘 / 3일``, ``여성 / 여자``, ``악사 / 나쁜 짓`` 처럼 같은
+# 말을 두 원소로 적은 것이다(위 5-1·5-2).  프롬프트만 고치면 캐시가 옛 답을 그대로
+# 내주므로 고침이 데이터에 닿지 못한다.  그래서 칸을 새로 판다 — ``v2`` 는 지우지 않고
+# 남겨 두어 되돌아갈 자리로 쓴다.
+cache = Cache(paths.CACHE, "word_ko_v3")
 todo = sorted(key for key in items if clean(
     (cache.get(key) or {}).get("ko")) is None)
 print(f"용례 항목 {len(items)} | 캐시 히트 {len(items) - len(todo)}"
@@ -236,14 +258,277 @@ if missing:
     raise RuntimeError(
         f"용례 미번역 {len(missing)}개 — 다시 실행해 캐시를 완성한다")
 
+# ---------- 감수 (2 패스) ----------
+#
+# **초안과 감수를 한 호출에 담지 않는다.**  1 패스는 '뜻을 지어내는' 일이 지배적이라,
+# 같은 자리에서 '동의어를 합쳐라'·'한자음을 거르라' 를 함께 시키면 그쪽이 밀린다.
+# 프롬프트를 조이는 것으로는 안 됐다 — 규칙을 아홉까지 늘려 전건을 다시 물었는데 뜻이
+# 여럿인 용례가 3,521 에서 3,343 으로 5% 줄었을 뿐이다.
+#
+# 2 패스는 짓지 않는다.  **이미 나온 답을 놓고 세 가지만 본다** — 원소가 서로 다른
+# 말인가, 한국어로 자연스러운가, 괄호가 남았는가.  지어낼 일이 없으니 판단이 밀릴
+# 자리도 없다.
+#
+# 감수는 **그 초안에 대한** 답이다.  초안이 바뀌면 감수도 다시 받아야 하므로 열쇠에
+# 초안을 함께 싣는다.  그러지 않으면 새 초안에 옛 감수가 붙는다.
+REVIEW_BATCH = 40          # 초안이 함께 실려 1 패스보다 항목이 무겁다
+REVIEW_WORKERS = 4         # 감수는 따로 조인다 — 1 패스와 부하가 다르다
+# **두 패스에 다른 모델을 쓴다.**  1 패스는 11,910 건을 찍어 내는 대량 생성이라
+# flash 로 충분하고, 2 패스는 판단 하나를 정확히 해야 하는 자리다.  flash 가 1 패스
+# 안에서 이미 놓친 그 판단을 2 패스에서 또 flash 에게 시키면 앞뒤가 맞지 않는다.
+#
+# 이 Vertex 프로젝트에 열려 있는 것은 ``gemini-3.7-flash`` 와
+# ``gemini-3.1-pro-preview`` 다.  ``gemini-3.1-pro`` 는 없다(404) — 이름을 줄여
+# 적지 않는다.  캐시는 모델별로 칸이 갈리므로(``shared/gemini.py`` 의 ``Cache``)
+# 모델을 바꾸면 그 모델의 답만 쌓이고 다른 모델의 답을 잘못 집어 오지 않는다.
+REVIEW_MODEL = "gemini-3.1-pro-preview"
+
+REVIEW_PROMPT = """너는 한국어 사전 감수자다. 아래는 일본어 낱말에 **이미 붙어 있는** 한국어 뜻이다.
+새로 짓지 않는다. 고칠 곳만 고치고 나머지는 글자 그대로 되돌린다.
+
+  k   대상 한자        rd  그 한자가 이 낱말에서 갖는 요미카타
+  w   낱말 표기        ko  지금 붙어 있는 뜻 — 이것을 감수한다
+
+[세 가지만 본다]
+
+1. **ko 의 원소가 둘 이상이면, 그 둘이 한국어에서 정말 다른 말인가?**
+   한쪽을 다른 쪽의 뜻풀이로 써도 된다면 같은 말이다. 같으면 대표 하나만 남긴다.
+     ["그릇", "용기"]         -> ["그릇"]
+     ["사흘", "3일"]          -> ["사흘"]
+     ["자라다", "성장하다"]    -> ["자라다"]
+     ["의미", "뜻"]           -> ["의미"]
+     ["물바다", "침수됨"]      -> ["물바다"]
+     ["또는", "혹은"]         -> ["또는"]
+   정말 다르면 손대지 않는다.
+     ["사다", "화를 자초하다", "높이 평가하다"]   -> 셋 다 남긴다
+     ["샛별", "스타"]                          -> 둘 다 남긴다
+
+2. **원소 하나하나가 한국어로 자연스러운가?**
+   스스로 물어라 — '한국 사람에게 이 낱말을 설명할 때 내가 이 말을 쓰겠는가?'
+   - 한자를 한국 한자음으로 읽기만 한 말은, 한국어에서 **바로 그 뜻으로 흔히 쓰일 때만** 둔다.
+       休止 ["휴지"]    -> ["멈춤"]        '휴지' 는 한국어에서 화장실 휴지를 먼저 뜻한다
+       畏怖 ["외포"]    -> ["두려워함"]     한국어에 없는 말이다
+       光陰 ["광음"]    -> ["세월"]
+       疫病神 ["역병신"] -> ["불행을 몰고 오는 사람"]
+       人口 ["인구"]    -> ["인구"]        한국어에서 그대로 쓰이므로 그대로 둔다
+       愛情 ["애정"]    -> ["애정"]
+   - 한자에서 오지 않았어도 어색하면 고쳐 쓴다.
+
+3. **괄호를 쓰지 않는다.** 괄호 안의 말이 없으면 뜻이 서지 않는 경우에는 풀어서 한 마디로
+   잇고, 그 정도가 아니면 괄호째 버린다.
+     ["(초밥 등을) 빚다"]   -> ["초밥을 빚다"]
+     ["(사정에) 어둡다"]    -> ["사정에 어둡다"]
+     ["(비유) 주요 상품"]   -> ["주요 상품"]
+     ["담당(자)"]          -> ["담당자"]
+
+[그 밖의 규약]
+- 원소는 최대 %(max)d개.
+- 한 원소 안에서 쉼표(,)·세미콜론(;)·가운뎃점(·)·빗금(/)을 뜻의 구분자로 쓰지 않는다.
+- rd 로 읽었을 때의 뜻만 본다. 같은 표기의 다른 요미카타 뜻을 끌어오지 않는다.
+- 고칠 곳이 없으면 ko 를 **글자 그대로** 되돌린다.
+
+[출력]
+{"results": [{"i": 입력번호, "ko": ["뜻", ...], "fix": "고쳤으면 왜 고쳤는지 한 마디, 안 고쳤으면 빈 문자열"}]}
+JSON 객체 하나뿐이다. 설명 금지.
+
+"""
+
+review = Cache(paths.CACHE, "word_ko_review_v1", REVIEW_MODEL)
+reviewer = Gemini(paths.GEMINI_KEY, model=REVIEW_MODEL)
+
+
+def draft_of(key):
+    return cache[key]["ko"]
+
+
+def reviewed_of(key):
+    return clean((review.get(review_key(key, draft_of(key))) or {}).get("ko"))
+
+
+review_todo = sorted(key for key in items if reviewed_of(key) is None)
+print(f"[감수] 대상 {len(items)} | 캐시 히트 {len(items) - len(review_todo)}"
+      f" | 호출 대상 {len(review_todo)}"
+      f" | 묶음 {-(-len(review_todo) // REVIEW_BATCH)} | 동시 {REVIEW_WORKERS} | 모델 {REVIEW_MODEL}")
+
+
+def ask_review(group):
+    listing = [{"i": number, "k": items[key]["k"], "rd": items[key]["rd"],
+                "w": items[key]["w"], "ko": draft_of(key)}
+               for number, key in enumerate(group, 1)]
+    answer = reviewer.json(REVIEW_PROMPT % {"max": MAX_SENSES}
+                           + json.dumps(listing, ensure_ascii=False))
+    rows = answer.get("results", answer if isinstance(answer, list) else [])
+    return group, [row for row in rows if isinstance(row, dict)]
+
+
+review_groups = list(chunk(review_todo, REVIEW_BATCH))
+if review_groups:
+    start = time.time()
+    done = 0
+    changed = 0
+    with ThreadPoolExecutor(max_workers=REVIEW_WORKERS) as pool:
+        for group, rows in pool.map(ask_review, review_groups):
+            by_number = {row.get("i"): row for row in rows}
+            for number, key in enumerate(group, 1):
+                row = by_number.get(number)
+                if not row:
+                    continue
+                lines = clean(row.get("ko"))
+                if lines is None:
+                    continue
+                if lines != draft_of(key):
+                    changed += 1
+                review[review_key(key, draft_of(key))] = {
+                    "ko": lines, "fix": str(row.get("fix", "")).strip()}
+            review.flush()
+            done += len(group)
+            print(f"[감수 {done}/{len(review_todo)}] 고친 것 누계 {changed}"
+                  f" | {time.time() - start:.0f}s", flush=True)
+
+# 감수를 못 받은 항목은 **초안을 쓴다.**  뜻이 아예 없는 것(위)과 달리 초안도 쓸 수
+# 있는 답이므로, 그것 때문에 파이프라인 전체를 세우지는 않는다.  대신 수를 크게
+# 알린다 — 다시 돌리면 그것만 다시 묻는다.
+unreviewed = [key for key in items if reviewed_of(key) is None]
+if unreviewed:
+    print(f"!! 감수 못 받음 {len(unreviewed)} — 그 자리는 초안을 쓴다."
+          f" 다시 돌리면 그것만 다시 묻는다")
+    print("  ", unreviewed[:10])
+
+
+# ---------- 낱말 맞추기 (3 패스) ----------
+#
+# 한 낱말이 여러 한자 카드에 실린다.  값이 겹치는 것은 손해가 아니지만 **어긋나는
+# 것은 손해다** — 한쪽이 틀렸다는 뜻이다.  2 패스는 항목을 하나씩 보므로 한쪽만
+# 고쳐 놓기도 한다: ``傾倒`` 가 ``傾`` 카드에서는 '몰두함', ``倒`` 카드에서는
+# '경도' 였고(한국어 '경도' 는 다른 뜻이 먼저다), ``公私`` 가 한쪽에서는 '공사'였다.
+#
+# **묶어서 하나로 강제하지 않는다.**  같은 표기라도 읽기가 갈리면 다른 낱말이다
+# (``明日`` 의 ミョウ=みょうにち 와 あす).  그 갈림은 후리가나를 봐야 아는데 이
+# 단계에는 아직 후리가나가 없다 — '한 한자가 같은 표기를 두 번 싣는가' 로 대신
+# 재 보았더니 실제 데이터에서 다섯 건(出納·憧憬·明日·蜘蛛·足跡)을 놓쳤다.
+#
+# 그래서 어긋난 줄들을 **한자리에 놓고 줄마다 답하게** 한다.  같은 낱말이면 통일하고
+# 다른 낱말이면 그대로 둔다 — 잘못 합칠 위험이 구조적으로 없다.
+AGREE_BATCH = 12           # 묶음 하나에 실리는 '표기' 수.  줄 수는 그 두세 배다
+
+AGREE_PROMPT = """너는 한국어 사전 감수자다. 아래는 **한 표기의 낱말이 여러 한자 카드에 실린 것**이고,
+카드마다 붙은 한국어 뜻이 서로 어긋나 있다. 어긋났다는 것은 어느 한쪽이 틀렸다는 뜻이다.
+
+  g   묶음 번호 — g 가 같은 줄은 표기가 같다
+  w   낱말 표기
+  k   그 카드의 한자      rd  그 한자가 이 낱말에서 갖는 요미카타
+  ko  그 카드에 지금 붙어 있는 뜻
+
+[판단]
+1. **먼저 rd 를 보고 같은 낱말인지 가른다.**
+   - 같은 낱말이면(대개 그렇다) 뜻이 어긋날 이유가 없다. 한 묶음의 모든 줄에
+     **가장 좋은 한국어 하나를 똑같이** 준다.
+   - 읽기가 갈려 서로 다른 낱말이면 통일하지 않는다. 줄마다 제 뜻을 준다.
+       明日  k=明 rd=ミョウ -> みょうにち     k=日 rd=あす -> あす
+       이런 줄은 same 을 false 로 적고 각자의 뜻을 쓴다.
+2. 통일할 때 고르는 기준은 **어느 쪽이 한국어로 더 자연스러운가** 다.
+   - 한자를 한국 한자음으로 읽기만 한 말은, 한국어에서 **바로 그 뜻으로 흔히 쓰일 때만** 쓴다.
+       傾倒  '몰두함' / '경도'                -> "몰두함"    '경도' 는 한국어에서 다른 뜻이 먼저다
+       公私  '공적인 일과 사적인 일' / '공사'   -> "공적인 일과 사적인 일"
+       休憩  '휴식' / '휴게'                  -> "휴식"
+       伯仲  '우열을 가리기 힘듦' / '백중'      -> "우열을 가리기 힘듦"
+   - 둘 다 자연스러우면 짧고 흔한 쪽을 쓴다.
+3. 뜻이 여럿이면 배열의 원소로 나눈다. 최대 %(max)d개.
+   **같은 말을 두 원소로 적지 않는다** — '그릇, 용기' 는 한 뜻이다.
+4. **괄호를 쓰지 않는다.** 괄호 없이는 뜻이 서지 않으면 풀어서 한 마디로 잇고,
+   그 정도가 아니면 괄호째 버린다.
+5. 한 원소 안에서 쉼표·세미콜론·가운뎃점·빗금을 뜻의 구분자로 쓰지 않는다.
+
+[출력]
+{"results": [{"i": 입력번호, "ko": ["뜻", ...], "same": true 또는 false}]}
+**모든 줄에 답한다.** i 는 입력의 i 를 그대로 쓴다.
+same 은 '이 줄이 같은 묶음의 다른 줄들과 같은 낱말인가' 다.
+JSON 객체 하나뿐이다. 설명 금지.
+
+"""
+
+agree = Cache(paths.CACHE, "word_ko_agree_v1", REVIEW_MODEL)
+
+
+def settled_of(key):
+    """맞추기에 들어가기 전의 뜻 — 감수본, 없으면 초안."""
+    reviewed = reviewed_of(key)
+    return reviewed if reviewed is not None else draft_of(key)
+
+
+by_surface = {}
+for key, item in items.items():
+    by_surface.setdefault(item["w"], []).append(key)
+
+# 두 한자 이상에 걸쳐 있고 그 뜻이 서로 어긋나는 표기만 고른다.
+clashing = [sorted(keys) for _, keys in sorted(by_surface.items())
+            if len({items[k]["k"] for k in keys}) > 1
+            and len({tuple(settled_of(k)) for k in keys}) > 1]
+agree_todo = [group for group in clashing
+              if any(clean((agree.get(agree_key(k, settled_of(k))) or {}).get("ko")) is None
+                     for k in group)]
+print(f"[맞추기] 뜻이 어긋난 표기 {len(clashing)}군 / 용례"
+      f" {sum(len(g) for g in clashing)}건 | 물을 묶음 {len(agree_todo)}군"
+      f" | 호출 {-(-len(agree_todo) // AGREE_BATCH)} | 모델 {REVIEW_MODEL}")
+
+
+def ask_agree(batch):
+    listing = []
+    number = 0
+    numbering = {}
+    for group_index, group in enumerate(batch, 1):
+        for key in group:
+            number += 1
+            numbering[number] = key
+            listing.append({"i": number, "g": group_index, "w": items[key]["w"],
+                            "k": items[key]["k"], "rd": items[key]["rd"],
+                            "ko": settled_of(key)})
+    answer = reviewer.json(AGREE_PROMPT % {"max": MAX_SENSES}
+                           + json.dumps(listing, ensure_ascii=False))
+    rows = answer.get("results", answer if isinstance(answer, list) else [])
+    return numbering, [row for row in rows if isinstance(row, dict)]
+
+
+agree_batches = list(chunk(agree_todo, AGREE_BATCH))
+if agree_batches:
+    start = time.time()
+    done = 0
+    settled_count = 0
+    with ThreadPoolExecutor(max_workers=REVIEW_WORKERS) as pool:
+        for numbering, rows in pool.map(ask_agree, agree_batches):
+            for row in rows:
+                key = numbering.get(row.get("i"))
+                if key is None:
+                    continue
+                lines = clean(row.get("ko"))
+                if lines is None:
+                    continue
+                agree[agree_key(key, settled_of(key))] = {
+                    "ko": lines, "same": bool(row.get("same", True))}
+                settled_count += 1
+            agree.flush()
+            done += len(numbering)
+            print(f"[맞추기 {done}] 답 받은 줄 {settled_count}"
+                  f" | {time.time() - start:.0f}s", flush=True)
+
+unsettled = [k for group in clashing for k in group
+             if clean((agree.get(agree_key(k, settled_of(k))) or {}).get("ko")) is None]
+if unsettled:
+    print(f"!! 맞추기 못 받음 {len(unsettled)} — 그 자리는 감수본을 쓴다."
+          f" 다시 돌리면 그것만 다시 묻는다")
+    print("  ", unsettled[:10])
+
 # ---------- 임베딩 ----------
 for kanji, v in data.items():
     for bucket in ("readings", "except"):
         group = v.get(bucket, {})
         for rd, ws in list(group.items()):
-            group[rd] = [{"w": w,
-                          "ko": "\n".join(cache[f"{kanji}|{rd}|{w}"]["ko"])}
-                         for w in ws]
+            group[rd] = [
+                {"w": w,
+                 "ko": "\n".join(final_ko(f"{kanji}|{rd}|{w}",
+                                          cache[f"{kanji}|{rd}|{w}"]["ko"],
+                                          review, agree))}
+                for w in ws]
 
 dump_json_atomic(paths.D4_TRANSLATE, data, 2)
 print("data_translate.json written:", len(data))

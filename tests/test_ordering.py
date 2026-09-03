@@ -36,6 +36,20 @@ class PlainSurfaceTest(unittest.TestCase):
                             ordering.plain_surface(row["w"]), canonical(row["w"]))
 
 
+class WordLengthTest(unittest.TestCase):
+    """순서를 재는 '한자 길이' 는 **쓰이는 글자**만 센다."""
+
+    def test_generated_ruby_does_not_count(self) -> None:
+        self.assertEqual(ordering.word_length("空港(くうこう)"), 2)
+        self.assertEqual(ordering.word_length("承(うけたまわ)る"), 2)
+
+    def test_printed_ruby_does_not_count_either(self) -> None:
+        """``plain_surface`` 는 인쇄분을 남기지만 길이는 그것을 세지 않는다."""
+        self.assertEqual(ordering.plain_surface("三日（みっか）"), "三日（みっか）")
+        self.assertEqual(ordering.word_length("三日（みっか）"), 2)
+        self.assertEqual(ordering.word_length("一(いち)羽（わ）"), 2)
+
+
 class FuriganaLengthTest(unittest.TestCase):
     def test_pure_compound(self) -> None:
         self.assertEqual(ordering.furigana_length(example("空港(くうこう)", "공항")), 4)
@@ -81,6 +95,13 @@ class SortTest(unittest.TestCase):
                 example("開港(かいこう)", "나항")]
         self.assertEqual([e["ko"] for e in ordering.sort_examples(rows)],
                          ["가항", "나항", "하항"])
+
+    def test_printed_ruby_never_pushes_a_short_word_back(self) -> None:
+        """``三日`` 는 두 자다.  인쇄분 후리가나까지 세어 ``三日月`` 뒤로 밀렸었다."""
+        rows = [example("三日月(みかづき)", "초승달"),
+                example("三日（みっか）", "사흘")]
+        self.assertEqual([e["w"] for e in ordering.sort_examples(rows)],
+                         ["三日（みっか）", "三日月(みかづき)"])
 
     def test_sort_is_stable_and_idempotent(self) -> None:
         rows = [example("空港(くうこう)", "공항"),

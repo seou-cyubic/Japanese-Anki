@@ -81,6 +81,79 @@ class Stage3ReadingKeyTest(unittest.TestCase):
                     (reading, "uninflected"),
                 )
 
+    def test_numerals_keep_their_okurigana_and_never_become_verb_stems(self) -> None:
+        """``三つ指`` 의 ``みつ`` 는 ``立つ`` 의 ``たつ`` 와 겉모습만 같다.
+
+        본표는 수사를 세 꼴로 싣는다 — ``み``·``みつ``·``みっつ``.  가운데 꼴이
+        빠져 있어서 ``みつ`` 가 ``みー`` 로 갈렸고, 화면에서 '동사 활용' 칸에 앉았다.
+        """
+        for kanji, reading, example in (
+            ("三", "みつ", "三つ指"),
+            ("四", "よつ", "四つ角"),
+            ("五", "いつ", "五つ"),
+            ("六", "むつ", "六つ切り"),
+            ("八", "やつ", "八つ当たり"),
+        ):
+            with self.subTest(kanji=kanji):
+                self.assertEqual(
+                    reading_category_key(kanji, reading, [example]),
+                    (reading, "plain"),
+                )
+
+    def test_nouns_that_end_in_i_are_not_adjectives(self) -> None:
+        """``互い``·``災い`` 는 활용하지 않는다.  끝소리 하나로 어간을 만들면 명사가
+        통째로 '동사 활용' 칸에 앉는다."""
+        for kanji, reading, examples in (
+            ("互", "たがい", ["互い", "互いに", "互い違い"]),
+            ("幸", "さいわい", ["幸い", "幸いな事"]),
+            ("災", "わざわい", ["災い"]),
+            ("勢", "いきおい", ["勢い"]),
+            ("類", "たぐい", ["類い", "○○の類い"]),
+        ):
+            with self.subTest(kanji=kanji):
+                self.assertEqual(
+                    reading_category_key(kanji, reading, examples),
+                    (reading, "plain"),
+                )
+
+    def test_real_i_adjectives_are_still_inflected(self) -> None:
+        """명사를 빼내느라 형용사까지 빠지면 안 된다."""
+        for kanji, reading, example, expected in (
+            ("高", "たかい", "高い", "たかー"),
+            ("少", "すくない", "少ない", "すくー"),
+            ("潔", "いさぎよい", "潔い", "いさぎよー"),
+            ("賢", "かしこい", "賢い", "かしこー"),
+        ):
+            with self.subTest(kanji=kanji):
+                self.assertEqual(
+                    reading_category_key(kanji, reading, [example])[0], expected
+                )
+
+    def test_a_noun_form_that_shares_a_verb_stem_still_merges(self) -> None:
+        """``憩い`` 는 ``憩う`` 와 어간이 같다 — 그쪽은 활용이 맞으므로 갈라 두지 않는다."""
+        self.assertEqual(
+            merge_reading_rows("憩", {"いこう": ["憩う"], "いこい": ["憩い"]}),
+            {"いこー": ["憩う", "憩い"]},
+        )
+        self.assertEqual(
+            merge_reading_rows("問", {"とう": ["問う"], "とい": ["問い"]}),
+            {"とー": ["問う", "問い"]},
+        )
+
+    def test_real_tsu_verbs_are_still_inflected(self) -> None:
+        """수사를 빼내느라 진짜 동사까지 빠지면 안 된다."""
+        for kanji, reading, example, expected in (
+            ("立", "たつ", "立つ", "たー"),
+            ("持", "もつ", "持つ", "もー"),
+            ("待", "まつ", "待つ", "まー"),
+            ("保", "たもつ", "保つ", "たもー"),
+            ("貢", "みつぐ", "貢ぐ", "みつー"),
+        ):
+            with self.subTest(kanji=kanji):
+                self.assertEqual(
+                    reading_category_key(kanji, reading, [example])[0], expected
+                )
+
     def test_common_okurigana_boundaries(self) -> None:
         for kanji, reading, example, expected in (
             ("上", "あがる", "上がる", "あー"),

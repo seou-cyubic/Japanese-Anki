@@ -54,6 +54,17 @@ if (window.KanjiCard.displayReading('セイ') !== 'セイ') {
   throw new Error('design card must preserve raw Katakana');
 }
 
+/* 순서의 '한자 길이' 는 **쓰이는 글자**만 센다.  ``plainSurface`` 는 원전 인쇄분
+ * 후리가나(전각 괄호)를 표기에 남기므로 그것까지 세면 두 자짜리 ``三日`` 이 세 자짜리
+ * ``三日月`` 뒤로 밀린다 — `decks/kanji/pipeline/ordering.py` 와 같은 규칙이다. */
+const printedRuby = window.KanjiCard.sortExamples([
+  { w: '三日月(みかづき)', ko: '초승달' },
+  { w: '三日（みっか）', ko: '사흘' }
+]).map((example) => example.w);
+if (printedRuby.join(' ') !== '三日（みっか） 三日月(みかづき)') {
+  throw new Error(`printed ruby must not count as surface length: ${printedRuby}`);
+}
+
 const synthetic = {
   readings: [
     { rawKey: 'うむー', examples: [] },

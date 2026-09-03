@@ -11,21 +11,45 @@ from collections.abc import Iterable, MutableMapping
 
 
 UDAN = frozenset("うくぐすつぬぶむる")
+# 수사.  끝소리가 우단이라도 활용하지 않는다 — ``三つ指`` 의 ``みつ`` 는 ``立つ`` 의
+# ``たつ`` 와 겉모습이 같을 뿐이다.  **본표의 세 꼴을 모두 적는다.**  ``みっつ`` 같은
+# 촉음 꼴만 적어 두었더니 그 사이의 ``みつ・よつ・むつ・やつ`` 가 남아 ``みー`` 처럼
+# 동사 어간으로 갈렸다.
 NUMERALS = frozenset(
     {
         "ひとつ",
         "ふたつ",
+        "みつ",
         "みっつ",
+        "よつ",
         "よっつ",
+        "いつ",
         "いつつ",
+        "むつ",
         "むっつ",
         "ななつ",
+        "やつ",
         "やっつ",
         "ここのつ",
         "いくつ",
         "ます",
     }
 )
+# ``い`` 로 끝나지만 활용하지 않는 명사.  본표에서 이 읽기를 가진 한자는 형용사 행이
+# 따로 없어, 끝소리 하나만 보고 ``たがー`` 처럼 어간을 만들면 명사가 통째로 '동사 활용'
+# 칸에 앉는다.  ``憩い``(憩う)·``問い``(問う) 처럼 같은 한자에 동사 행이 있어 어간이
+# 실제로 합쳐지는 것은 여기 넣지 않는다 — 그쪽은 활용이 맞다.
+NOUNS = frozenset(
+    {
+        "たがい",     # 互い
+        "さいわい",   # 幸い
+        "わざわい",   # 災い
+        "いきおい",   # 勢い
+        "たぐい",     # 類い
+    }
+)
+# 끝소리 모양은 활용을 증명하지 못한다.  여기 적힌 읽기는 그 모양을 빌려 썼을 뿐이다.
+UNINFLECTED = NUMERALS | NOUNS
 RENYO_ENDING = {
     "う": "い",
     "く": "き",
@@ -45,10 +69,8 @@ def is_inflected_reading(reading: str) -> bool:
     """기존 Stage 3과 같은 범위에서 활용형 후보를 판정한다."""
     return bool(
         reading
-        and (
-            (reading[-1] in UDAN and reading not in NUMERALS)
-            or reading[-1] == "い"
-        )
+        and reading not in UNINFLECTED
+        and (reading[-1] in UDAN or reading[-1] == "い")
     )
 
 

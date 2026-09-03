@@ -12,21 +12,26 @@ if __name__ != "__main__":
 
 import sys
 import subprocess
+from pathlib import Path
 
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
 
+# 경로는 **부른 자리가 아니라 이 파일을 기준으로** 잡는다.  상대 경로를 그대로 쓰면
+# 저장소 뿌리에서 부르는 순간(README 가 적어 둔 그 방식이다) 스테이지를 못 찾는다.
+HERE = Path(__file__).resolve().parent
+ROOT = HERE.parents[2]
 STAGES = [
-    ("1", "pipeline/stage1_raw.py"),
-    ("2", "pipeline/stage2_korean.py"),
-    ("3", "pipeline/stage3_examples.py"),
-    ("4", "pipeline/stage4_translate.py"),
-    ("5", "pipeline/stage5_japanese.py"),
+    ("1", "stage1_raw.py"),
+    ("2", "stage2_korean.py"),
+    ("3", "stage3_examples.py"),
+    ("4", "stage4_translate.py"),
+    ("5", "stage5_japanese.py"),
 ]
 
 for no, script in STAGES:
     print(f"===== Stage {no}: {script} =====", flush=True)
-    r = subprocess.run([sys.executable, "-u", script])
+    r = subprocess.run([sys.executable, "-u", str(HERE / script)], cwd=str(ROOT))
     if r.returncode != 0:
         print(f"Stage {no} 실패 (exit {r.returncode}) — 중단")
         sys.exit(r.returncode)

@@ -157,7 +157,7 @@ def _reasons() -> dict:
         cache = load("kanji", "cache.json")
     except Exception:                       # noqa: BLE001 — 없으면 없는 대로 본다
         return {}
-    slot = cache.get("gemini-3.7-flash", {}).get("word_ko_v2", {})
+    slot = cache.get("gemini-3.7-flash", {}).get("word_ko_v3", {})
     return {key: (value or {}).get("why", "") for key, value in slot.items()}
 
 

@@ -49,9 +49,23 @@ class StoreTest(unittest.TestCase):
         self.assertEqual(self.data.read_bytes(), self.original_bytes)
 
     def test_save_persists_native_overlay_and_materializes_separately(self) -> None:
+        """고친 뜻은 **표기를 따라간다** — 자리는 따라가지 않는다.
+
+        저장은 순서를 다시 세운다(``spec.sort_record``).  뜻을 고치면 정렬 열쇠가
+        바뀌므로 그 용례는 칸 안에서 자리를 옮길 수 있다 — 그것이 정상이다.  자리로
+        찾으면 이 시험은 실데이터의 뜻 길이에 매달려, 뜻 하나가 바뀌는 것만으로
+        엉뚱하게 터진다.
+        """
+        def meaning_of(record, surface):
+            for example in record["readings"]["キ"]:
+                if example["w"].startswith(surface):
+                    return example["ko"]
+            raise AssertionError(f"{surface} 가 사라졌다")
+
         view = self.store.character("祈")
         edited = copy.deepcopy(view["record"])
         edited["readings"]["キ"][0]["ko"] = "소원을 빎"
+        target = view["record"]["readings"]["キ"][0]["w"][:2]
         result = self.store.save(
             "祈", edited, expected_etag=view["record_etag"], reason="뜻을 더 정확하게 수정"
         )
@@ -60,11 +74,11 @@ class StoreTest(unittest.TestCase):
         self.assertEqual(self.data.read_bytes(), self.original_bytes)
 
         reloaded = NativeStore(deck_at(self.data), self.overlay)
-        self.assertEqual(reloaded.character("祈")["record"]["readings"]["キ"][0]["ko"], "소원을 빎")
+        self.assertEqual(meaning_of(reloaded.character("祈")["record"], target), "소원을 빎")
         output = Path(self.temp.name) / "materialized.json"
         reloaded.materialize(output)
         materialized = json.loads(output.read_text(encoding="utf-8"))
-        self.assertEqual(materialized["祈"]["readings"]["キ"][0]["ko"], "소원을 빎")
+        self.assertEqual(meaning_of(materialized["祈"], target), "소원을 빎")
 
     def test_no_edit_materialization_preserves_base_bytes(self) -> None:
         output = Path(self.temp.name) / "materialized-no-edit.json"

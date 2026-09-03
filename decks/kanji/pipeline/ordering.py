@@ -3,7 +3,7 @@
 
 한 요미카타 안의 용례는 다음 순서로 놓인다.
 
-1. 한자 길이 오름차순            (표기 ``w`` 의 코드포인트 수)
+1. 한자 길이 오름차순            (후리가나를 걷어낸 표기 ``w`` 의 코드포인트 수)
 2. 한국어 뜻 길이 오름차순        (``ko`` 의 **첫 뜻**)
 3. 후리가나 길이 오름차순         (``ja`` 에서 복원한 전체 읽기)
 4. 한국어 뜻 가나다순             (완성형 한글은 코드포인트 순서가 곧 사전순)
@@ -21,6 +21,9 @@ _ANNOTATION_RE = re.compile(r"[㐀-鿿\U00020000-\U0002A6DF豈-﫿々〆]+[（(]
 _KANA_RE = re.compile(r"[ぁ-ゟァ-ヿー]")
 # 반각 괄호만 파이프라인이 붙인 후리가나다.  전각은 원전 인쇄분이라 표기에 남는다.
 _GENERATED_RE = re.compile(r"\([^)]*\)")
+# 순서를 재는 자리에서만 걷어내는 인쇄분 후리가나.  ``plain_surface`` 는 이것을
+# 남긴다 — 원전에 그렇게 **찍혀 있는** 글자이므로 표기의 일부다.
+_PRINTED_RE = re.compile(r"（[^）]*）")
 
 
 def plain_surface(annotated):
@@ -31,6 +34,17 @@ def plain_surface(annotated):
     ``test_ordering.py`` 가 검증한다.
     """
     return _GENERATED_RE.sub("", annotated or "")
+
+
+def word_length(annotated):
+    """순서를 재는 '한자 길이'.  후리가나는 인쇄분이든 생성분이든 세지 않는다.
+
+    ``plain_surface`` 로는 모자란다.  그것은 원전에 찍힌 후리가나(전각 괄호)를
+    표기의 일부로 남기므로 ``三日（みっか）`` 가 여덟 자가 되어, 두 자짜리 낱말이
+    세 자짜리 ``三日月`` 뒤로 밀렸다.  세는 것은 **쓰이는 글자**이지 그 위에 얹힌
+    읽기가 아니다.
+    """
+    return len(_PRINTED_RE.sub("", plain_surface(annotated or "")))
 
 
 def furigana_length(example):
@@ -64,7 +78,7 @@ def example_sort_key(example):
     # '한자 길이' 는 후리가나를 뺀 원 표기의 길이다.
     meaning = first_sense(example.get("ko"))
     return (
-        len(plain_surface(example.get("w") or "")),
+        word_length(example.get("w") or ""),
         len(meaning),
         furigana_length(example),
         meaning,

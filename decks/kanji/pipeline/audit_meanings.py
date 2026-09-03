@@ -20,6 +20,23 @@
    뜻이 정말 같을 때만 ``why`` 에 이유를 적게 한다.  뜻이 같은데 근거가 없으면 그냥
    갈라 쓰지 못한 것이고, 뜻이 다른데 '같다' 고 적혀 있으면 답이 흔들린 것이다.
 
+4. **한 용례 안에서 뜻이 실제로 갈렸는가.**  1 은 요미카타끼리 견주지만, 같은 용례
+   **안**에서 같은 말을 두 원소로 적어 놓는 일이 따로 있다(``사흘 / 3일``,
+   ``여성 / 여자``).  '두 한국어가 같은 말인가' 는 사전 판단이라 여기서 다 잴 수는
+   없다.  대신 **판단 없이 확실한 것만** 센다.
+
+   - 원소 하나가 그 낱말의 **한국 한자음 그대로**인 것(``意味 -> 의미 / 뜻``).
+     Unihan 의 ``kHangul`` 로 음을 조립해 맞춰 보므로 어림이 아니라 일치다.
+   - 자소가 거의 겹치는 두 원소(``자랑 / 자부심``).
+   - 괄호를 걷어내면 서로 같아지는 두 원소(``어둡다 / (사정에) 어둡다``).
+
+   나머지(``그릇 / 용기`` 처럼 글자가 전혀 안 겹치는 동의어)는 여기서 잡히지 않는다.
+   표본으로 재 보면 걸리지 않는 것 가운데도 40% 가량이 사실은 한 뜻이다 — 이 숫자는
+   **하한**이라는 뜻이다.
+
+5. **괄호를 쓰지 않았는가.**  괄호 안의 말은 읽는 쪽에 전달되지 않는다.  풀어 쓰거나
+   버려야 한다(stage4 프롬프트의 규칙 8).
+
 FAIL 은 규칙으로 확실한 것만이고 나머지는 WARN 이다.  되돌아오는 값은 FAIL 의 수다.
 """
 from __future__ import annotations
@@ -37,6 +54,7 @@ import ordering  # noqa: E402
 import paths  # noqa: E402
 
 from decks.kanji.model import MAX_SENSES, senses  # noqa: E402
+from shared.furigana import parse_annotated  # noqa: E402
 
 # 자소가 이만큼 겹치면 '갈랐다' 고 보기 어렵다.
 SIMILAR = 0.8
@@ -44,6 +62,66 @@ SIMILAR = 0.8
 COMMAS = 2
 
 _TRIM = re.compile(r"[()（）\[\]\s,·/]+")
+_PAREN = re.compile(r"[(（][^)）]*[)）]")
+_HANJA = re.compile(r"[⺀-⻿㐀-䶿一-鿿豈-﫿]")
+# 한자음을 조립해 볼 때 한 낱말에서 따져 볼 최대 경우의 수.  다음자가 겹치면
+# 경우가 폭발하므로 여기서 끊고 그 낱말은 재지 않는다.
+_MAX_SINO = 128
+
+
+def sino_sounds():
+    """한자 -> 한국 한자음 집합.  Unihan 의 ``kHangul`` 이 원전이다."""
+    table = defaultdict(set)
+    path = paths.UNIHAN / "Unihan_Readings.txt"
+    try:
+        text = path.read_text(encoding="utf-8")
+    except OSError:
+        return table
+    for line in text.splitlines():
+        if line.startswith("#"):
+            continue
+        parts = line.split("	")
+        if len(parts) < 3 or parts[1] != "kHangul":
+            continue
+        character = chr(int(parts[0][2:], 16))
+        for token in parts[2].split():
+            table[character].add(token.split(":")[0])
+    return table
+
+
+def sino_readings(surface, table):
+    """낱말을 한국 한자음으로 읽었을 때 나올 수 있는 모든 꼴.
+
+    한자만으로 이루어진 낱말에만 답한다 — 가나가 섞이면 한자음으로 읽을 수 없다.
+    """
+    characters = list(surface)
+    if not characters or not all(_HANJA.fullmatch(c) for c in characters):
+        return set()
+    out = {""}
+    for character in characters:
+        if character not in table:
+            return set()
+        out = {prefix + sound for prefix in out for sound in table[character]}
+        if len(out) > _MAX_SINO:
+            return set()
+    return out
+
+
+def redundant_pair(left, right, sino):
+    """두 뜻이 **판단 없이** 같다고 말할 수 있는가.  아니면 None."""
+    if left in sino and right not in sino:
+        return f"앞이 한자음 그대로다 — {left!r} / {right!r}"
+    if right in sino and left not in sino:
+        return f"뒤가 한자음 그대로다 — {left!r} / {right!r}"
+    bare_left = _PAREN.sub("", left).strip()
+    bare_right = _PAREN.sub("", right).strip()
+    if bare_left and bare_left == bare_right:
+        return f"괄호를 걷으면 같은 말이다 — {left!r} / {right!r}"
+    if normalise(left) == normalise(right):
+        return f"같은 말이다 — {left!r} / {right!r}"
+    if overlap(left, right) >= SIMILAR:
+        return f"자소가 거의 같다 ({overlap(left, right):.0%}) — {left!r} / {right!r}"
+    return None
 
 
 def normalise(meaning: str) -> str:
@@ -111,7 +189,7 @@ def main() -> int:
         cache = json.loads(paths.CACHE.read_text(encoding="utf-8"))
         why_of = {key: (value or {}).get("why", "")
                   for key, value in cache.get("gemini-3.7-flash", {})
-                  .get("word_ko_v2", {}).items()}
+                  .get("word_ko_v3", {}).items()}
     except (OSError, json.JSONDecodeError):
         why_of = {}
 
@@ -119,6 +197,17 @@ def main() -> int:
     warns: list[tuple[str, str]] = []
     total = 0
     sense_count: Counter[int] = Counter()
+    table = sino_sounds()
+    # 4·5 는 고장을 세는 것이 아니라 **사람이 판단해야 할 자리**를 세는 것이다.
+    # FAIL 도 WARN 도 아닌 자기 칸에 담는다 — 여기 잡힌 만큼 다시 물어야 한다.
+    redundant: list[tuple[str, str]] = []
+    sino_only: list[tuple[str, str]] = []
+    parens: list[tuple[str, str]] = []
+    # 같은 낱말이 여러 한자 카드에 실린다.  값이 겹치는 것은 손해가 아니지만
+    # **어긋나는 것은 손해다** — 한쪽이 틀렸다는 뜻이다.  같은 표기·같은 전체
+    # 읽기면 같은 낱말이므로 뜻도 같아야 한다(``音(おと)`` 와 ``音(ね)`` 는 전체
+    # 읽기가 달라 여기서 갈리지 않는다).
+    same_word: dict[tuple[str, str], list[tuple[str, str, str]]] = defaultdict(list)
 
     # --- 2. 표기 규약 ---
     for kanji, record in payload.items():
@@ -134,6 +223,35 @@ def main() -> int:
                         fails.append((spot, f"세미콜론이 뜻 경계로 남아 있다 — {meaning!r}"))
                     if len(lines) > MAX_SENSES:
                         fails.append((spot, f"뜻이 {len(lines)}개다"))
+                    surface = _PAREN.sub(
+                        "", ordering.plain_surface(example.get("w") or ""))
+                    sino = sino_readings(surface, table)
+                    # --- 4. 한 용례 **안**에서 갈렸는가 ---
+                    for index, one in enumerate(lines):
+                        found = next(
+                            (redundant_pair(one, other, sino)
+                             for other in lines[index + 1:]
+                             if redundant_pair(one, other, sino)), None)
+                        if found:
+                            redundant.append((spot, found))
+                            break
+                    # --- 4-1. 뜻이 한자음 하나뿐인가 ---
+                    #
+                    # ``人口 -> 인구`` 는 옳고 ``休止 -> 휴지`` 는 옳지 않다 — 한국어
+                    # ``휴지`` 는 압도적으로 화장실 휴지다.  둘은 글자만 보아서는
+                    # 갈라지지 않는다(그 말이 한국어에서 어떻게 쓰이는가의 문제다).
+                    # 그래서 **가려낼 자리를 표시만** 하고 판단은 하지 않는다.
+                    if len(lines) == 1 and lines[0] in sino:
+                        sino_only.append((spot, f"뜻이 한자음 그대로다 — {lines[0]!r}"))
+                    parsed = parse_annotated(example.get("w") or "")
+                    if parsed:
+                        same_word[(surface, parsed["all"])].append(
+                            (kanji, reading, meaning))
+                    # --- 5. 괄호 ---
+                    for one in lines:
+                        if _PAREN.search(one):
+                            parens.append((spot, f"괄호가 남아 있다 — {one!r}"))
+                            break
                     for line in lines:
                         if len(re.findall(r"[,·/]", line)) >= COMMAS:
                             warns.append((spot, f"한 뜻 안에 쉼표류가 여럿이다 — {line!r}"))
@@ -187,6 +305,29 @@ def main() -> int:
     print(f"요미카타가 갈리는 표기 {checked}군 | 뜻이 갈린 것 {split_ok}"
           f" ({split_ok / checked:.0%})" if checked else "겹치는 표기 없음")
     print(f"모델이 근거를 남긴 표기군 {claimed_same}")
+    clash = {key: rows for key, rows in same_word.items()
+             if len({row[0] for row in rows}) > 1
+             and len({row[2] for row in rows}) > 1}
+    total_clash = sum(len(rows) for rows in clash.values())
+    print(f"\n[한 낱말이 카드마다 다른 뜻]  {len(clash)}군 / 용례 {total_clash}건")
+    for (word, reading), rows in sorted(clash.items())[:8]:
+        print(f"  {word}({reading})")
+        for kanji, reading_key, meaning in rows:
+            print(f"      {kanji}|{reading_key}  {meaning.splitlines()[0]}")
+    if len(clash) > 8:
+        print(f"  … 그리고 {len(clash) - 8}군 더")
+    print(f"\n[다시 물어야 할 자리]  뜻 중복 의심 {len(redundant)}"
+          f" · 뜻이 한자음뿐 {len(sino_only)} · 괄호 {len(parens)}")
+    for label, rows in (("뜻 중복 의심", redundant), ("뜻이 한자음뿐", sino_only),
+                        ("괄호", parens)):
+        if not rows:
+            continue
+        print(f"  --- {label} ---")
+        for spot, reason in rows[:8]:
+            print(f"    {spot}: {reason}")
+        if len(rows) > 8:
+            print(f"    … 그리고 {len(rows) - 8}건 더")
+
     print(f"\nFAIL {len(fails)} · WARN {len(warns)}")
     for label, rows in (("FAIL", fails), ("WARN", warns)):
         if not rows:

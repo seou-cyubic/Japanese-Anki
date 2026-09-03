@@ -16,6 +16,7 @@ from shared.paths import (  # noqa: E402
     GEMINI_KEY,
     JMDICT,
     ROOT,
+    UNIHAN,
 )
 
 DECK = DeckPaths("kanji").ensure()
@@ -48,7 +49,7 @@ __all__ = [
     "BASE", "DATA", "TMP", "ROOT", "DECK",
     "JOYO_PDF", "JOYO_OLD_PDF", "HYOGAI_PDF", "HYOGAI_DATA_PDF",
     "SCHOOL_TXT", "HYOGAI_TXT", "KOREAN_XLS",
-    "JMDICT", "BCCWJ", "GEMINI_KEY",
+    "JMDICT", "BCCWJ", "UNIHAN", "GEMINI_KEY",
     "CACHE", "D1_RAW", "D2_KOREAN", "D3_EXAMPLE", "D4_TRANSLATE", "D5_JAPANESE",
     "S1_JOYO",
 ]

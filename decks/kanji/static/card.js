@@ -352,6 +352,12 @@
 
   /* pipeline/ordering.py 와 같은 규칙: 한자 길이 -> 뜻 길이 -> 후리가나 길이 ->
    * 뜻 가나다순.  X 마커는 여러 예외 키를 한 줄로 합치므로 여기서 다시 세운다. */
+  /* 순서를 재는 '한자 길이'.  `plainSurface` 는 원전에 **찍혀 있는** 후리가나(전각
+   * 괄호)를 표기의 일부로 남기지만, 세는 것은 쓰이는 글자다 — 그것까지 세면
+   * `三日（みっか）` 가 여덟 자가 되어 `三日月` 뒤로 밀린다(`pipeline/ordering.py`). */
+  const wordLength = (annotated) =>
+    [...plainSurface(annotated || '').replace(/（[^）]*）/g, '')].length;
+
   function furiganaLength(example) {
     const parsed = parseAnnotated(example.w);
     if (parsed) return [...parsed.all].length;
@@ -364,8 +370,7 @@
        * 뒤로 밀리면 순서가 뜻의 개수를 따라가 버린다 — `pipeline/ordering.py` 와 같다. */
       const leftKo = senses(left.ko)[0] || '';
       const rightKo = senses(right.ko)[0] || '';
-      return [...plainSurface(left.w || '')].length
-          - [...plainSurface(right.w || '')].length
+      return wordLength(left.w) - wordLength(right.w)
         || [...leftKo].length - [...rightKo].length
         || furiganaLength(left) - furiganaLength(right)
         || (leftKo < rightKo ? -1 : leftKo > rightKo ? 1 : 0);
