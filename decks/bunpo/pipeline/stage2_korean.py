@@ -38,6 +38,7 @@ from marking import (EMPTY_LEXICON, entry_keys, mark,  # noqa: E402
 from shared.gemini import Cache, Gemini, chunk  # noqa: E402
 
 BATCH = 15
+LEGACY_MODELS = ("gemini-3.7-flash",)   # 읽기만 하는 옛 모델 캐시 칸
 
 PROMPT = (
     "너는 일본어 표현문형 사전의 예문을 한국어로 옮기고, 그 예문에서 지정된 문형이"
@@ -75,11 +76,12 @@ def has_wildcard(head: str) -> bool:
 
 def main() -> None:
     entries = json.load(paths.D1_RAW.open(encoding="utf-8"))
-    cache_ko = Cache(paths.CACHE, "example_ko")
+    # 모델을 바꿔도 이미 받은 번역·구간은 다시 묻지 않는다 — 옛 칸은 읽기만 한다.
+    cache_ko = Cache(paths.CACHE, "example_ko", fallback_models=LEGACY_MODELS)
     # 조각 **배열**을 담는 새 칸이다.  구간 하나만 담던 옛 칸(``example_span``)은
     # 지우지 않는다 — 그 답들은 대부분 그대로 쓸 수 있고, 다시 받으려면 돈이 든다.
-    cache_span = Cache(paths.CACHE, "example_spans")
-    legacy_span = Cache(paths.CACHE, "example_span")
+    cache_span = Cache(paths.CACHE, "example_spans", fallback_models=LEGACY_MODELS)
+    legacy_span = Cache(paths.CACHE, "example_span", fallback_models=LEGACY_MODELS)
     gemini = Gemini(paths.GEMINI_KEY)
     lexicon = build_lexicon()
 
@@ -158,7 +160,10 @@ def main() -> None:
             if not row:
                 continue
             korean = str(row.get("ko", "")).strip()
-            if korean:
+            # **이미 받은 번역은 덮어쓰지 않는다.**  구간을 기계로 못 찾은 예문은 실행할
+            # 때마다 구간을 다시 묻는데, 그때 딸려 온 번역으로 바꾸면 카드의 번역이
+            # 까닭 없이 달라진다(모델을 바꾼 뒤 18 개가 그렇게 바뀌었다).
+            if korean and example["_key"] not in cache_ko:
                 cache_ko[example["_key"]] = korean
             answer = row.get("spans", row.get("span", ""))
             if isinstance(answer, str):

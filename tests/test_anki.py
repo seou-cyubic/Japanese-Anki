@@ -428,7 +428,7 @@ class CacheTest(unittest.TestCase):
         import tempfile
         from pathlib import Path
 
-        from shared.gemini import Cache
+        from shared.gemini import MODEL, Cache
 
         path = Path(tempfile.mkdtemp()) / "cache.json"
         alpha = Cache(path, "alpha")
@@ -437,6 +437,6 @@ class CacheTest(unittest.TestCase):
         alpha.flush()
         beta["y"] = "2"
         beta.flush()                      # 여기서 alpha 가 사라지면 안 된다
-        saved = json.loads(path.read_text(encoding="utf-8"))["gemini-3.7-flash"]
+        saved = json.loads(path.read_text(encoding="utf-8"))[MODEL]
         self.assertEqual(saved["alpha"], {"x": "1"})
         self.assertEqual(saved["beta"], {"y": "2"})

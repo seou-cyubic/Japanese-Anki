@@ -111,12 +111,24 @@ def annotate(surface: str, reading: str) -> str | None:
     맞물리지 않거나 해가 둘 이상이면 **조용히 하나를 고르지 않고 ``None`` 을 낸다.**
     부르는 쪽이 그것을 보고 사람에게 넘기거나 주석 없이 둔다.
     """
+    found = annotate_candidates(surface, reading, limit=2)
+    return found[0] if len(found) == 1 else None
+
+
+def annotate_candidates(surface: str, reading: str, limit: int = 64) -> list[str]:
+    """``annotate`` 가 찾은 **모든** 해.  최대 ``limit`` 개까지 모은다.
+
+    해가 둘 이상이면 ``annotate`` 는 물러난다.  그런데 그 모호함은 대개 조사가
+    낱말 읽기 안에도 들어 있어서 생긴다 — ``音楽が流れ`` + ``おんがくがながれ`` 는
+    ``音楽→おんがく · 流→な`` 말고도 ``音楽→おん · が · 流→くがな`` 로도 맞물린다.
+    그런 경우를 사전으로 가려낼 수 있도록, 부르는 쪽에 후보를 전부 넘긴다.
+    """
     if not isinstance(surface, str) or not isinstance(reading, str):
-        return None
+        return []
     if not surface or not reading:
-        return None
+        return []
     if any(character in surface for character in "()（）"):
-        return None                       # 이미 주석이 붙어 있다.  건드리지 않는다
+        return []                         # 이미 주석이 붙어 있다.  건드리지 않는다
 
     runs: list[tuple[bool, str]] = []      # (한자런인가, 글자들)
     for character in surface:
@@ -126,14 +138,14 @@ def annotate(surface: str, reading: str) -> str | None:
         else:
             runs.append((kanji, character))
     if not any(kanji for kanji, _text in runs):
-        return surface if to_hiragana(surface) == to_hiragana(reading) else None
+        return [surface] if to_hiragana(surface) == to_hiragana(reading) else []
 
     target = to_hiragana(reading)
     solutions: list[list[str]] = []
 
     def walk(index: int, position: int, taken: list[str]) -> None:
-        if len(solutions) > 1:
-            return                          # 모호하다.  더 볼 것 없다
+        if len(solutions) >= limit:
+            return                          # 충분히 모았다.  더 볼 것 없다
         if index == len(runs):
             if position == len(target):
                 solutions.append(list(taken))
@@ -161,10 +173,8 @@ def annotate(surface: str, reading: str) -> str | None:
             taken.pop()
 
     walk(0, 0, [])
-    if len(solutions) != 1:
-        return None
-    annotated = "".join(solutions[0])
-    return annotated if parse_annotated(annotated) else None
+    joined = ("".join(solution) for solution in solutions)
+    return [annotated for annotated in joined if parse_annotated(annotated)]
 
 
 def parse_annotated(annotated: str) -> dict[str, Any] | None:

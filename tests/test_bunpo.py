@@ -268,6 +268,21 @@ class ExtractedDataTest(unittest.TestCase):
                 self.assertIn(example["ja"].rstrip()[-1], "。！？」』）…",
                               f'{entry["head"]} {example["no"]}: {example["ja"][-24:]}')
 
+    def test_korean_notes_are_not_cut_at_the_start(self) -> None:
+        """한국어 해설이 조사로 시작하면 앞의 일본어 인용을 잃은 것이다.
+
+        윗줄이 중국어 해설이면 그 상태를 이어받아, 줄 첫머리의 ``「～とき…」`` 가 중국어
+        쪽으로 가서 버려졌다 — ``의 형태로,「…」의 동작…`` 으로 시작하는 해설이 58 개였다.
+        여백의 참조 표시 ``→参`` 의 화살표가 해설 첫머리에 붙어서도 안 된다.
+        """
+        import re
+        cut = re.compile(r"^(?:의|를|을|은|는|로|와|과|에)(?:\s|「|형태)|^형태로|^→")
+        broken = [(entry["head"], entry["note_ko"][:20]) for entry in self.entries
+                  if cut.search(entry["note_ko"])]
+        self.assertEqual(broken[:5], [], f"{len(broken)}건")
+        toki = next(entry for entry in self.entries if entry["head"] == "とき")
+        self.assertTrue(toki["note_ko"].startswith("「～とき…」의 형태로"), toki["note_ko"][:30])
+
     def test_ruby_is_balanced(self) -> None:
         for entry in self.entries:
             for example in entry["examples"]:

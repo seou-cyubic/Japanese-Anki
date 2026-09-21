@@ -30,11 +30,11 @@ class ProductionContractTest(unittest.TestCase):
             {
                 "characters": 3012,
                 "readings": 4862,
-                "examples": 11910,
+                "examples": 11923,
                 "regular_examples": 11708,
                 "variants": 391,
-                "exception_readings": 193,
-                "exception_examples": 202,
+                "exception_readings": 206,
+                "exception_examples": 215,
                 "tags": {
                     "s1": 80,
                     "s2": 160,

@@ -88,6 +88,47 @@ class VerifyTest(unittest.TestCase):
         self.assertEqual(state, stage3_verify.PHRASE)
 
 
+class ExampleCheckTest(unittest.TestCase):
+    """예문 검사가 멀쩡한 예문을 버리지 않는다.  빈 예문 96 개가 전부 여기서 나왔다."""
+
+    READINGS = {
+        "格上": {"かくうえ"}, "格上げ": {"かくあげ"},
+        "会社": {"かいしゃ"}, "菓子": {"かし"},
+        "見込む": {"みこむ"}, "見込み": {"みこみ"},
+        "支払い": {"しはらい"}, "支払う": {"しはらう"},
+        "音楽": {"おんがく"}, "流れる": {"ながれる"},
+        "提供": {"ていきょう"},
+    }
+
+    def setUp(self) -> None:
+        from decks.toeic.pipeline import stage4_examples
+        self.stage = stage4_examples
+
+    def test_a_shorter_headword_does_not_decide_first(self) -> None:
+        """``格上``(かくうえ) 가 먼저 걸려도 ``格上げ``(かくあげ) 로 맞으면 통과한다."""
+        self.assertTrue(self.stage.reading_fits("格上", "かくあ", "げする", self.READINGS))
+
+    def test_rendaku_is_applied_to_the_dictionary_reading(self) -> None:
+        self.assertTrue(self.stage.reading_fits("会社", "がいしゃ", "を", self.READINGS))
+        self.assertTrue(self.stage.reading_fits("菓子", "がし", "を", self.READINGS))
+
+    def test_a_conjugated_verb_matches_its_stem(self) -> None:
+        self.assertTrue(self.stage.reading_fits("見込", "みこ", "んでいます", self.READINGS))
+        self.assertTrue(self.stage.reading_fits("支払", "しはら", "われる", self.READINGS))
+
+    def test_a_wrong_reading_is_still_rejected(self) -> None:
+        self.assertFalse(self.stage.reading_fits("提供", "つていきょう", "する", self.READINGS))
+
+    def test_an_ambiguous_alignment_is_settled_by_the_dictionary(self) -> None:
+        chosen = self.stage.choose_annotation(
+            "音楽が流れています", "おんがくがながれています", self.READINGS)
+        self.assertEqual(chosen, "音楽(おんがく)が流(なが)れています")
+
+    def test_a_frame_mark_is_not_searched_for(self) -> None:
+        self.assertEqual(self.stage.japanese_stem("〜の間"), "間")
+        self.assertEqual(self.stage.japanese_stem("〜に違いない"), "違")
+
+
 class ListTest(unittest.TestCase):
     """NGSL 과 TSL 은 한 낱말도 겹치지 않는다 — 합집합이 곧 덱 크기다."""
 
@@ -177,7 +218,10 @@ class ProductionDataTest(unittest.TestCase):
                 english = example["en"].lower()
                 if not any(re.search(rf"\b{re.escape(f)}", english) for f in family):
                     missed.append((word, "en"))
-                if japanese_stem(plain(sense["ja"])) not in plain(example["ja"]):
+                # 기능어의 뜻풀이는 문법 설명이라(``関係代名詞``) 문장에 나타나지 않는다.
+                # Stage 4 의 ``check`` 와 같은 기준이다.
+                if (sense["pos"] != "function"
+                        and japanese_stem(plain(sense["ja"])) not in plain(example["ja"])):
                     missed.append((word, "ja"))
         self.assertEqual(missed[:10], [], f"{len(missed)}건이 낱말을 담지 않았다")
 

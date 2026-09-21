@@ -23,9 +23,11 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "decks" / "kanji" / "pipeline"))
 
-from tests import load  # noqa: E402
+from tests import deck_data, load  # noqa: E402
+from shared.gemini import MODEL  # noqa: E402
 
 import audit_meanings  # noqa: E402
+import meanings  # noqa: E402
 import ordering  # noqa: E402
 
 from decks.kanji.model import (  # noqa: E402
@@ -157,8 +159,15 @@ def _reasons() -> dict:
         cache = load("kanji", "cache.json")
     except Exception:                       # noqa: BLE001 — 없으면 없는 대로 본다
         return {}
-    slot = cache.get("gemini-3.7-flash", {}).get("word_ko_v3", {})
-    return {key: (value or {}).get("why", "") for key, value in slot.items()}
+    slot = cache.get(MODEL, {}).get(meanings.DRAFT_SLOT, {})
+    reasons = {key: (value or {}).get("why", "") for key, value in slot.items()}
+    # 카드에 실리는 것은 Claude 감수본이다.  그 감수가 남긴 근거가 초안의 근거보다 앞선다.
+    try:
+        review = meanings.load_claude_review(deck_data("kanji", "claude_review.json"))
+    except unittest.SkipTest:
+        review = {}
+    reasons.update(meanings.claude_reasons(review))
+    return reasons
 
 
 def _record(*, ko: str) -> dict:

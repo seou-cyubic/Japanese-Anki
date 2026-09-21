@@ -18,8 +18,6 @@ from __future__ import annotations
 
 import json
 import sys
-import xml.etree.ElementTree as ET
-from collections import defaultdict
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
@@ -27,7 +25,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 from decks.toeic.pipeline import paths  # noqa: E402
 from shared.furigana import annotate, to_hiragana  # noqa: E402
 from shared.gemini import dump_json_atomic  # noqa: E402
-from shared.paths import JMDICT  # noqa: E402
+from shared import jmdict as shared_jmdict  # noqa: E402
 
 # ``する`` 처럼 사전 표제어 뒤에 붙는 꼬리.  표제어는 ``搭乗`` 이지만 낱말로 쓸 때는
 # ``搭乗する`` 다.  꼬리를 떼어 보고 다시 찾는다.
@@ -40,21 +38,8 @@ UNSURE = "unsure"       # 표기는 있으나 읽기가 사전과 다르다 — 
 
 
 def jmdict_readings() -> dict[str, set[str]]:
-    """표기 -> 읽기 집합.  가나만인 낱말은 자기 자신이 읽기다."""
-    found: dict[str, set[str]] = defaultdict(set)
-    for _event, entry in ET.iterparse(JMDICT, events=("end",)):
-        if entry.tag != "entry":
-            continue
-        kebs = [k.findtext("keb") for k in entry.findall("k_ele")]
-        rebs = [r.findtext("reb") for r in entry.findall("r_ele")]
-        for keb in kebs:
-            found[keb].update(r for r in rebs if r)
-        if not kebs:
-            for reb in rebs:
-                if reb:
-                    found[reb].add(reb)
-        entry.clear()
-    return found
+    """표기 -> 읽기 집합.  ``shared.jmdict`` 가 한자 덱과 함께 쓰는 정의다."""
+    return shared_jmdict.readings()
 
 
 def heads(surface: str) -> list[tuple[str, str]]:

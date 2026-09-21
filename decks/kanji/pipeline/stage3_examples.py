@@ -17,6 +17,7 @@ sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")
 import sys, os
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import paths
+from shared.furigana import to_hiragana
 import fuhyo
 import notes as joyo_notes
 import re
@@ -27,7 +28,7 @@ import time
 import itertools
 import urllib.request
 import pymupdf
-from collections import Counter
+from collections import ChainMap, Counter
 from google.oauth2 import service_account
 import google.auth.transport.requests
 
@@ -46,13 +47,18 @@ except ModuleNotFoundError:  # ``python pipeline/stage3_examples.py``
 
 
 KEY = str(paths.GEMINI_KEY)
-MODEL = "gemini-3.7-flash"
+MODEL = "gemini-3.8-flash"
+LEGACY_MODELS = ("gemini-3.7-flash",)   # 읽기만 하는 옛 모델 캐시 칸
 REGION = "global"
 PROJECT = json.load(open(KEY))["project_id"]
 
 CACHE_FILE = str(paths.CACHE)
 CACHE = json.load(open(CACHE_FILE, encoding="utf-8"))
-C37E = CACHE.setdefault("gemini-3.7-flash", {}).setdefault("example_word", {})
+# 모델을 바꿔도 이미 받은 용례는 다시 묻지 않는다.  ``ChainMap`` 은 앞 칸(새 모델)에만
+# 쓰고, 찾을 때는 옛 모델 칸까지 본다.
+C_EXAMPLE = ChainMap(CACHE.setdefault(MODEL, {}).setdefault("example_word", {}),
+                     *(CACHE.get(older, {}).get("example_word", {})
+                       for older in LEGACY_MODELS))
 
 creds = service_account.Credentials.from_service_account_file(
     KEY, scopes=["https://www.googleapis.com/auth/cloud-platform"])
@@ -557,18 +563,41 @@ for k in data:
     data[k]["note"] = got
     for entry in got:
         note_count[entry["kind"]] += 1
+
+# **備考 의 '특별한 읽기' 는 예외 읽기다.**  ``「春雨」…などは，「はるさめ」…。`` 는 그 한자를
+# 정규 읽기로 읽지 않는 낱말을 짚은 것이고, 학습자에게는 付表 의 숙자훈과 다를 것이
+# 없다.  그래서 ``except`` 로 옮긴다 — 열쇠는 付表 와 같이 **낱말 전체의 읽기(히라가나)** 다.
+# 옮긴 것은 ``note`` 에서 뺀다.  두 곳에 같은 것을 두지 않는다는 원칙은 그대로다.
+moved = 0
+for k in data:
+    remaining = []
+    for entry in data[k].get("note", []):
+        if entry["kind"] != "special_reading":
+            remaining.append(entry)
+            continue
+        bucket = data[k]["except"].setdefault(to_hiragana(entry["reading"]), [])
+        if entry["word"] not in bucket:
+            bucket.append(entry["word"])
+            moved += 1
+        note_count["special_reading"] -= 1
+    if remaining:
+        data[k]["note"] = remaining
+    else:
+        data[k].pop("note", None)
+note_count = +note_count
 print("備考:", dict(note_count), "| note 를 가진 한자:",
-      sum(1 for v in data.values() if v.get("note")))
+      sum(1 for v in data.values() if v.get("note")),
+      "| 예외로 옮긴 특별한 읽기:", moved)
 
 empty_all = [(k, r) for k, v in data.items() for r, w in v["readings"].items() if not w]
 print("빈 용례 읽기:", len(empty_all))
 BATCH = 20
 for bi, group in enumerate(chunk(empty_all, BATCH)):
-    fresh = [(k, r) for k, r in group if f"{k}|{r}" not in C37E]
+    fresh = [(k, r) for k, r in group if f"{k}|{r}" not in C_EXAMPLE]
     for k, r in group:
         ck = f"{k}|{r}"
-        if ck in C37E:
-            data[k]["readings"][r] = [C37E[ck]]
+        if ck in C_EXAMPLE:
+            data[k]["readings"][r] = [C_EXAMPLE[ck]]
     if fresh:
         listing = "\n".join(f"- 한자 {k} / 요미카타 {r}" for k, r in fresh)
         prompt = (
@@ -587,10 +616,188 @@ for bi, group in enumerate(chunk(empty_all, BATCH)):
                 for kk2, rr in fresh:
                     if kk2 == k and rr == y:
                         data[k]["readings"][rr] = [str(w).strip()]
-                        C37E[f"{k}|{y}"] = str(w).strip()
+                        C_EXAMPLE[f"{k}|{y}"] = str(w).strip()
         json.dump(CACHE, open(CACHE_FILE, "w", encoding="utf-8"),
                   ensure_ascii=False, indent=1)
     print(f"[빈 용례 {bi+1}] 처리 {len(group)} (신규 호출 {len(fresh)})")
+
+# ================= 표외한자: 칸을 용례의 읽기에 맞춘다 =================
+# **용례가 먼저이고, 칸은 그 용례에서 한자가 실제로 읽히는 소리일 뿐이다.**
+#
+# 표외한자의 칸은 한자 목록(H.txt)의 음에서 오고, 용례는 코퍼스나 모델이 채운다.
+# 그래서 ``鵜`` 의 テイ 칸에 ``鵜``(う), ``蕎`` 의 キョウ 칸에 ``蕎麦``(そば) 처럼 **그
+# 소리로 읽히지 않는 낱말**이 들어가 있었다.  후리가나를 사전대로 달면 칸과 어긋나고,
+# 칸에 맞추면 틀린 후리가나가 된다.  용례를 믿고 칸을 옮긴다.
+#
+#   한자의 읽기를 갈라낼 수 있으면 그 읽기의 칸으로       鵜(う) -> う · 甕棺(かめかん) -> かめ
+#   갈라낼 수 없는 숙자훈이면 낱말 전체 읽기로 예외 칸에   蕎麦(そば) · 蜻蛉(とんぼ)
+#
+# 칸과 소리가 연탁·반탁·촉음으로만 다른 것은 같은 읽기다(``巫覡``(ふげき) 의 ブ).
+# 사전에 없는 낱말은 판정할 근거가 없으므로 그대로 둔다.  상용한자의 칸은 표가 정한
+# 것이므로 건드리지 않는다.  새 칸이 음독인지는 Unihan ``kJapaneseOn`` 으로 가른다 —
+# 음독이면 가타카나, 아니면 히라가나 열쇠다(기존 칸과 같은 표기법).
+ROMAJI = {
+    "あ": "A", "い": "I", "う": "U", "え": "E", "お": "O",
+    "か": "KA", "き": "KI", "く": "KU", "け": "KE", "こ": "KO",
+    "さ": "SA", "し": "SHI", "す": "SU", "せ": "SE", "そ": "SO",
+    "た": "TA", "ち": "CHI", "つ": "TSU", "て": "TE", "と": "TO",
+    "な": "NA", "に": "NI", "ぬ": "NU", "ね": "NE", "の": "NO",
+    "は": "HA", "ひ": "HI", "ふ": "FU", "へ": "HE", "ほ": "HO",
+    "ま": "MA", "み": "MI", "む": "MU", "め": "ME", "も": "MO",
+    "や": "YA", "ゆ": "YU", "よ": "YO",
+    "ら": "RA", "り": "RI", "る": "RU", "れ": "RE", "ろ": "RO",
+    "わ": "WA", "を": "WO", "ん": "N",
+    "が": "GA", "ぎ": "GI", "ぐ": "GU", "げ": "GE", "ご": "GO",
+    "ざ": "ZA", "じ": "JI", "ず": "ZU", "ぜ": "ZE", "ぞ": "ZO",
+    "だ": "DA", "ぢ": "JI", "づ": "ZU", "で": "DE", "ど": "DO",
+    "ば": "BA", "び": "BI", "ぶ": "BU", "べ": "BE", "ぼ": "BO",
+    "ぱ": "PA", "ぴ": "PI", "ぷ": "PU", "ぺ": "PE", "ぽ": "PO",
+}
+YOON = {"ゃ": "A", "ゅ": "U", "ょ": "O"}
+
+
+def romaji(hiragana):
+    """Unihan ``kJapaneseOn`` 과 같은 철자.  ``きょう`` -> ``KYOU``, ``はち`` -> ``HACHI``."""
+    out = []
+    index = 0
+    while index < len(hiragana):
+        char = hiragana[index]
+        following = hiragana[index + 1] if index + 1 < len(hiragana) else ""
+        if char == "っ":
+            out.append(romaji(following)[:1])
+        elif following in YOON:
+            base = ROMAJI.get(char, "")
+            if base in ("SHI", "CHI", "JI"):
+                out.append(base[:-1] + YOON[following])
+            else:
+                out.append(base[:-1] + "Y" + YOON[following])
+            index += 1
+        else:
+            out.append(ROMAJI.get(char, ""))
+        index += 1
+    return "".join(out)
+
+
+def to_katakana(hiragana):
+    return "".join(chr(ord(c) + 0x60) if "ぁ" <= c <= "ゖ" else c for c in hiragana)
+
+
+japanese_on = {}
+with open(paths.UNIHAN / "Unihan_Readings.txt", encoding="utf-8") as stream:
+    for line in stream:
+        fields = line.rstrip("\n").split("\t")
+        if len(fields) == 3 and fields[1] == "kJapaneseOn":
+            japanese_on[chr(int(fields[0][2:], 16))] = set(fields[2].split())
+
+VOICE = str.maketrans("かきくけこさしすせそたちつてとはひふへほ",
+                      "がぎぐげござじずぜぞだぢづでどばびぶべぼ")
+HALF = str.maketrans("はひふへほ", "ぱぴぷぺぽ")
+DEVOICE = str.maketrans("がぎぐげござじずぜぞだぢづでどばびぶべぼぱぴぷぺぽ",
+                        "かきくけこさしすせそたちつてとはひふへほはひふへほ")
+
+
+def sound_forms(reading):
+    """같은 읽기로 볼 꼴들 — 그대로·연탁·반탁·촉음편."""
+    plain = kat2hira(reading).replace("ー", "")
+    forms = {plain}
+    if plain:
+        forms.add(plain[0].translate(VOICE) + plain[1:])
+        forms.add(plain[0].translate(HALF) + plain[1:])
+        forms.add(plain[0].translate(DEVOICE) + plain[1:])
+        if plain[-1] in SOKUON_SRC:
+            forms.add(plain[:-1] + "っ")
+    return forms
+
+
+def kanji_residual(word, kanji, reading):
+    """낱말 읽기에서 ``kanji`` 가 맡는 소리.  하나로 정해지지 않으면 None.
+
+    다른 한자는 정렬 DB 의 읽기(연탁 포함)로 맞춰야 한다.  ``kanji`` 가 두 번 이상
+    나오거나 다른 한자와 소리를 나눌 수 없으면(숙자훈) None 이다.
+    """
+    if word.count(kanji) != 1:
+        return None
+    tokens = tokenize(word)
+    found = set()
+
+    def walk(position, index, residual):
+        if len(found) > 1:
+            return
+        if index == len(tokens):
+            if position == len(reading) and residual:
+                found.add(residual)
+            return
+        kind, text = tokens[index]
+        if kind == "w":
+            if reading.startswith(text, position):
+                walk(position + len(text), index + 1, residual)
+            return
+        if text == kanji:
+            for end in range(position + 1, len(reading) + 1):
+                walk(end, index + 1, reading[position:end])
+            return
+        tried = set()
+        for candidate in db.get(text, ()):
+            for form in variants(candidate) | sound_forms(candidate):
+                # 빈 읽기는 소리를 하나도 맡지 않는다 — 蕎麦(そば) 의 麦 가 빈칸이 되면 안 된다.
+                if not form or form in tried or not reading.startswith(form, position):
+                    continue
+                tried.add(form)
+                walk(position + len(form), index + 1, residual)
+
+    walk(0, 0, "")
+    return next(iter(found)) if len(found) == 1 else None
+
+
+rekeyed = []
+for k in hyogai_order:
+    readings = data[k]["readings"]
+    for rd in list(readings):
+        forms = sound_forms(rd)
+        kept = []
+        for w in readings[rd]:
+            # 사전의 읽기 순서를 지킨다.  앞의 것이 대표 읽기다(窪地 는 くぼち, おうち 가 아니다).
+            known = list(dict.fromkeys(kat2hira(r) for r in jm.get(w, [])))
+            if not known:
+                kept.append(w)
+                continue
+            # 사전 읽기 어디에든 그 소리가 들어 있으면 옮기지 않는다.  정렬 DB 에 다른
+            # 한자의 읽기가 빠져 있어 소리를 못 갈랐을 뿐인 멀쩡한 용례를 지키기 위해서다.
+            if any(form in reading for form in forms for reading in known):
+                kept.append(w)
+                continue
+            residuals = [kanji_residual(w, k, r) for r in known]
+            if set(residuals) & forms:
+                kept.append(w)
+                continue
+            usable = [r for r in residuals if r]
+            if usable:
+                sound = usable[0]
+                key = to_katakana(sound) if romaji(sound) in japanese_on.get(k, ()) else sound
+                target = readings.setdefault(key, [])
+                bucket = "readings"
+            else:
+                key = known[0]
+                target = data[k]["except"].setdefault(key, [])
+                bucket = "except"
+            if w not in target:
+                target.append(w)
+            rekeyed.append((k, rd, w, bucket, key))
+        readings[rd] = kept
+    for rd in [r for r, ws in readings.items() if not ws]:
+        del readings[rd]
+    # 숙자훈 용례밖에 없던 한자는 칸이 하나도 남지 않는다(草鞋 의 鞋, 琵琶 의 琶).
+    # 칸은 용례의 요미카타일 뿐이므로 그 낱말 전체의 읽기를 칸으로 삼아 되돌린다.
+    if not readings:
+        for key in [key for key, words in data[k]["except"].items()
+                    if any(item[0] == k and item[2] in words and item[4] == key
+                           for item in rekeyed)]:
+            readings[key] = data[k]["except"].pop(key)
+        rekeyed[:] = [(kanji, before, word, "readings" if kanji == k else bucket, after)
+                      for kanji, before, word, bucket, after in rekeyed]
+print("표외한자 칸 옮김:", len(rekeyed))
+for kanji, before, word, bucket, after in rekeyed:
+    print(f"  {kanji} {before} {word} -> {bucket} {after}")
 
 json.dump(data, open(paths.D3_EXAMPLE, "w", encoding="utf-8"), ensure_ascii=False, indent=2)
 remain = sum(1 for v in data.values() for r, w in v["readings"].items() if not w)

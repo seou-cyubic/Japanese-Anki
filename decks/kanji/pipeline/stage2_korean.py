@@ -25,7 +25,7 @@ from google.oauth2 import service_account
 import google.auth.transport.requests
 
 KEY = str(paths.GEMINI_KEY)
-MODEL = "gemini-3.7-flash"
+MODEL = "gemini-3.8-flash"
 REGION = "global"
 PROJECT = json.load(open(KEY))["project_id"]
 
@@ -34,7 +34,7 @@ try:
     CACHE = json.load(open(CACHE_FILE, encoding="utf-8"))
 except Exception:
     CACHE = {}
-C37H = CACHE.setdefault("gemini-3.7-flash", {}).setdefault("huneum", {})
+C_HUNEUM = CACHE.setdefault(MODEL, {}).setdefault("huneum", {})
 
 creds = service_account.Credentials.from_service_account_file(
     KEY, scopes=["https://www.googleapis.com/auth/cloud-platform"])
@@ -130,10 +130,10 @@ print("훈음 불명:", len(unk))
 # ---------- Gemini 보강 ----------
 BATCH = 25
 for bi, group in enumerate(chunk(unk, BATCH)):
-    fresh = [c for c in group if c not in C37H]
+    fresh = [c for c in group if c not in C_HUNEUM]
     for c in group:
-        if c in C37H and c in data and not data[c]["korean"]["본"]:
-            data[c]["korean"]["본"] = [C37H[c]]
+        if c in C_HUNEUM and c in data and not data[c]["korean"]["본"]:
+            data[c]["korean"]["본"] = [C_HUNEUM[c]]
             data[c]["korean_src"] = "gemini"
     fresh = [c for c in fresh if not data[c]["korean"]["본"]]
     if fresh:
@@ -152,7 +152,7 @@ for bi, group in enumerate(chunk(unk, BATCH)):
         for it in arr:
             if it.get("char") and it.get("ko"):
                 ko = str(it["ko"]).strip()
-                C37H[it["char"]] = ko
+                C_HUNEUM[it["char"]] = ko
                 if it["char"] in data and not data[it["char"]]["korean"]["본"]:
                     data[it["char"]]["korean"]["본"] = [ko]
                     data[it["char"]]["korean_src"] = "gemini"

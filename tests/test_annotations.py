@@ -47,7 +47,7 @@ class AnnotationTest(unittest.TestCase):
                     count += 1
                     if parse_annotated(example["w"]) is None:
                         failures.append((character, raw_key, example))
-        self.assertEqual(count, 11_910)
+        self.assertEqual(count, 11_923)
         self.assertEqual(failures, [])
 
 

@@ -54,7 +54,9 @@ import ordering  # noqa: E402
 import paths  # noqa: E402
 
 from decks.kanji.model import MAX_SENSES, senses  # noqa: E402
+from meanings import DRAFT_SLOT, claude_reasons, load_claude_review  # noqa: E402
 from shared.furigana import parse_annotated  # noqa: E402
+from shared.gemini import MODEL  # noqa: E402
 
 # 자소가 이만큼 겹치면 '갈랐다' 고 보기 어렵다.
 SIMILAR = 0.8
@@ -63,6 +65,7 @@ COMMAS = 2
 
 _TRIM = re.compile(r"[()（）\[\]\s,·/]+")
 _PAREN = re.compile(r"[(（][^)）]*[)）]")
+_DIGIT = re.compile(r"[0-9０-９]")
 _HANJA = re.compile(r"[⺀-⻿㐀-䶿一-鿿豈-﫿]")
 # 한자음을 조립해 볼 때 한 낱말에서 따져 볼 최대 경우의 수.  다음자가 겹치면
 # 경우가 폭발하므로 여기서 끊고 그 낱말은 재지 않는다.
@@ -113,6 +116,10 @@ def redundant_pair(left, right, sino):
         return f"앞이 한자음 그대로다 — {left!r} / {right!r}"
     if right in sino and left not in sino:
         return f"뒤가 한자음 그대로다 — {left!r} / {right!r}"
+    # ``四日 -> 나흘 / 4일``.  한쪽만 숫자로 적힌 짧은 두 뜻은 같은 수를 두 번 적은 것이다.
+    if (bool(_DIGIT.search(left)) != bool(_DIGIT.search(right))
+            and max(len(left), len(right)) <= 6):
+        return f"숫자 표기와 글자 표기가 나란하다 — {left!r} / {right!r}"
     bare_left = _PAREN.sub("", left).strip()
     bare_right = _PAREN.sub("", right).strip()
     if bare_left and bare_left == bare_right:
@@ -188,10 +195,12 @@ def main() -> int:
     try:
         cache = json.loads(paths.CACHE.read_text(encoding="utf-8"))
         why_of = {key: (value or {}).get("why", "")
-                  for key, value in cache.get("gemini-3.7-flash", {})
-                  .get("word_ko_v3", {}).items()}
+                  for key, value in cache.get(MODEL, {})
+                  .get(DRAFT_SLOT, {}).items()}
     except (OSError, json.JSONDecodeError):
         why_of = {}
+    # 마지막 감수가 남긴 근거가 있으면 그것을 쓴다 — 카드에 실리는 뜻이 그 감수본이다.
+    why_of.update(claude_reasons(load_claude_review(paths.D4_CLAUDE_REVIEW)))
 
     fails: list[tuple[str, str]] = []
     warns: list[tuple[str, str]] = []

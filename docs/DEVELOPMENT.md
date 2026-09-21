@@ -89,9 +89,9 @@ https://www.newgeneralservicelist.com/s/TSL_12_lemmatized_for_teaching.csv
 
 | 덱 | 최종 산출물 | 크기 | 무엇이 들었나 |
 |---|---|---|---|
-| 한자 | `data_japanese.json` | ~1.9 MB | 한자 3,012 · 요미카타 4,862 · 용례 11,910 · 이체자 391 · 備考 459 |
+| 한자 | `data_japanese.json` | ~1.9 MB | 한자 3,012 · 요미카타 4,862 · 용례 11,923 · 이체자 391 · 備考 446 |
 | 문법 | `bunpo_korean.json` | ~1.9 MB | 문형 631 · 예문 2,520 · 번역 2,520 · 문법 구간 표시 2,511 |
-| 토익 | `toeic_japanese.json` | ~3.8 MB | 낱말 4,059 · 뜻 6,423 · 예문 6,327 쌍 |
+| 토익 | `toeic_japanese.json` | ~3.8 MB | 낱말 4,059 · 뜻 6,423 · 예문 6,423 쌍 |
 
 `data/cache.json` 은 모델 응답 캐시다. 있으면 두 번째 실행부터 신규 호출이 거의
 발생하지 않으므로 **지우지 않는 편이 좋다**(다만 저장소에는 올리지 않는다).

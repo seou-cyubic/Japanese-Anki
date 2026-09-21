@@ -39,7 +39,7 @@ for (const record of Object.values(data)) {
     }
   }
 }
-if (examples !== 11910) throw new Error(`unexpected example count: ${examples}`);
+if (examples !== 11923) throw new Error(`unexpected example count: ${examples}`);
 if (window.KanjiCard.groupOfKey('キ') !== 'on') throw new Error('Katakana must be on');
 if (window.KanjiCard.groupOfKey('いのり') !== 'kun') throw new Error('Hiragana must be kun');
 if (window.KanjiCard.groupOfKey('いのー') !== 'verb') throw new Error('ー must be verb');

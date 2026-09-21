@@ -75,6 +75,7 @@ TERMINATORS = "。！？」』）…"          # 문장이 끝났음을 보이�
 NOTE_SIZE = 6.4
 NOTE_LANGUAGE = {"AdobeSong": "zh", "AdobeMyungjo": "ko"}
 NOTE_QUOTE_FONT = "RyuminPro-Regular"   # 해설 안에 인용된 일본어
+MARGIN_GAP = 8.0                         # 여백 참조 표시와 본문 사이의 틈(pt)
 NOTE_JA_SIZE = 8.9
 
 CIRCLED = "①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑰⑱⑲⑳"
@@ -289,16 +290,41 @@ def extract(document):
             # 언어 글꼴(AdobeSong·AdobeMyungjo)을 만나면 상태가 바뀌고, 그 사이의
             # 일본어 인용은 지금 상태의 해설에 속한다.  한국어는 5.7pt(뜻)에도 같은
             # 글꼴로 나오므로 크기로 먼저 가른다.
+            #
+            # **줄 첫머리의 인용은 뒤따르는 언어의 것이다.**  상태를 윗줄에서 이어받기만
+            # 하면, 중국어 해설 다음 줄이 ``「～とき…」의 형태로`` 처럼 인용으로 시작할 때
+            # 그 인용이 중국어 쪽으로 가서 버려진다 — 한국어 해설이 ``의 형태로`` 로
+            # 시작하는 항목이 58 개 있었다.  그래서 인용은 잠시 들고 있다가, 다음에 나오는
+            # 언어 글꼴의 해설에 붙인다.  줄이 인용으로 끝나면 지금 상태의 해설에 붙인다.
+            #
+            # 여백의 참조 표시 ``→参`` 은 해설이 아니다.  화살표만 해설 글꼴이고 뒤따르는
+            # 「参」 은 작은 글꼴이라, 인용과 함께 들고 있으면 ``→「間」는…`` 처럼 해설
+            # 첫머리에 화살표가 붙는다.  바로 뒤에 「参」 이 오는 화살표는 버린다.
+            # 「参」 이 다른 줄로 묶이는 일도 있으므로(글꼴이 작아 기준선이 다르다), 줄의
+            # 첫 해설 글자인 화살표가 다음 글자와 크게 떨어져 **왼쪽 여백**에 있어도 버린다.
+            margin_marks = {id(char) for char, following in zip(rest, rest[1:])
+                            if char["c"] == "→" and following["c"] == "参"}
+            sized = [c for c in rest if c["size"] == NOTE_SIZE]
+            if (len(sized) > 1 and sized[0]["c"] == "→"
+                    and sized[1]["x"] - sized[0]["x1"] > MARGIN_GAP):
+                margin_marks.add(id(sized[0]))
             korean = []
+            pending = []
             for char in (c for c in rest if c["size"] == NOTE_SIZE):
                 language = next((value for prefix, value in NOTE_LANGUAGE.items()
                                  if char["font"].startswith(prefix)), None)
-                if language is not None:
-                    note_language = language
-                elif not char["font"].startswith(NOTE_QUOTE_FONT):
+                if language is None:
+                    if (char["font"].startswith(NOTE_QUOTE_FONT)
+                            and id(char) not in margin_marks):
+                        pending.append(char)
                     continue          # 6.4pt 의 그 밖의 글꼴은 기호다 — 해설이 아니다
+                note_language = language
                 if note_language == "ko":
+                    korean.extend(pending)
                     korean.append(char)
+                pending = []
+            if pending and note_language == "ko":
+                korean.extend(pending)
             if korean:
                 current["note_ko"] += text_of(korean)
     return entries

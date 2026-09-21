@@ -25,6 +25,8 @@ import sys, os
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import paths
 import ordering
+from shared import jmdict
+from shared.furigana import to_hiragana
 import re
 import json
 import os
@@ -36,13 +38,13 @@ from google.oauth2 import service_account
 import google.auth.transport.requests
 
 KEY = str(paths.GEMINI_KEY)
-MODEL = "gemini-3.7-flash"
+MODEL = "gemini-3.8-flash"
 REGION = "global"
 PROJECT = json.load(open(KEY))["project_id"]
 
 CACHE_FILE = str(paths.CACHE)
 CACHE = json.load(open(CACHE_FILE, encoding="utf-8"))
-C37F = CACHE.setdefault("gemini-3.7-flash", {}).setdefault("furigana", {})
+C_FURIGANA = CACHE.setdefault(MODEL, {}).setdefault("furigana", {})
 
 creds = service_account.Credentials.from_service_account_file(
     KEY, scopes=["https://www.googleapis.com/auth/cloud-platform"])
@@ -209,11 +211,48 @@ for kanji, v in data.items():
                 x["w"], rd, x.get("ko", ""), f"{kanji}의 특례 읽기",
                 is_exception=True)
 
+# ---------- 사전 대조 ----------
+# **후리가나는 모델이 달고, 맞는지는 사전이 판정한다.**  예전 검사는 괄호 구조와 '읽기
+# 키가 들어 있는가' 만 보았다.  그래서 ``上積(うわず)み``(사전 うわづみ)·``勘当(かんとう)``
+# (かんどう)·``出納(すいのう)``(すいとう) 같은 읽기가 그대로 통과했다 — 사전에 있는 낱말
+# 9,774 개 가운데 49 개가 사전과 달랐다.
+#
+# 사전에 있는 낱말이면 **전체 읽기가 사전 읽기 중 하나와 같아야** 통과한다.  사전에 없는
+# 낱말은 물을 곳이 없으므로 예전처럼 통과시킨다.  인쇄된 전각 요미가나（…）는 표기가
+# 아니므로 떼고 찾는다(``四日（よっか）`` -> ``四日``).
+DICTIONARY = jmdict.readings()
+PRINTED_READING = re.compile(r"（[^）]*）")
+print(f"JMdict 표기 {len(DICTIONARY)}종")
+
+# **원천이 사전보다 앞선다.**  常用漢字表 는 ``掛`` 한 글자를 かかり 로 읽는 용례로 싣는데,
+# JMdict 의 ``掛`` 표제어에는 かけ·がかり 뿐이다.  사전을 따르면 공식 읽기가 지워진다.
+# 표외한자가 아닌 한자의 **그 한자 한 글자 용례**를 **읽기 키 그대로** 읽은 것은 표가
+# 정한 읽기이므로 사전에 대지 않는다.  표외한자(``h``)의 음은 표가 아니라 목록에서 온
+# 것이라 이 예외를 주지 않는다 — ``鵜(てい)`` 는 사전대로 ``鵜(う)`` 다.
+def official_single(w, rd, parsed):
+    record = data.get(w)
+    if not rd or record is None or record.get("tag") == "h" or parsed is None:
+        return False
+    return norm(parsed["all"]) == norm(rd.replace("ー", ""))
+
+def dictionary_readings(w, rd=None):
+    if rd and w in data and data[w].get("tag") != "h":
+        return []                  # 표가 정한 한 글자 용례.  사전 읽기를 내밀지 않는다
+    return sorted(DICTIONARY.get(PRINTED_READING.sub("", w), ()))
+
+def dictionary_ok(w, parsed, rd=None):
+    known = DICTIONARY.get(PRINTED_READING.sub("", w))
+    if not known or parsed is None:
+        return not known
+    if rd and w in data and data[w].get("tag") != "h":
+        return official_single(w, rd, parsed)   # 표가 정한 읽기와 같아야 한다
+    return to_hiragana(parsed["all"]) in {to_hiragana(reading) for reading in known}
+
 def cached_annotation_ok(key):
-    """구조가 깨졌거나 특례 조각과 맞지 않는 캐시는 다시 조사한다."""
+    """구조가 깨졌거나, 특례 조각과 맞지 않거나, 사전과 다른 캐시는 다시 조사한다."""
     w, rd = key
-    parsed = validate(w, C37F.get(f"{w}|{rd}", ""))
-    if parsed is None:
+    parsed = validate(w, C_FURIGANA.get(f"{w}|{rd}", ""))
+    if parsed is None or not dictionary_ok(w, parsed, rd):
         return False
     return not items[key]["exception"] or reading_ok(parsed["all"], rd)
 
@@ -227,12 +266,12 @@ def seed_rekeyed_annotations():
     모호하면 모델 판정에 남겨 잘못된 동음이의 읽기를 재사용하지 않는다.
     """
     by_word = {}
-    for cache_key, annotation in list(C37F.items()):
+    for cache_key, annotation in list(C_FURIGANA.items()):
         word, separator, _ = cache_key.rpartition("|")
         if not separator:
             continue
         parsed = validate(word, annotation)
-        if parsed is not None:
+        if parsed is not None and dictionary_ok(word, parsed):
             by_word.setdefault(word, set()).add(annotation)
 
     seeded = 0
@@ -243,7 +282,9 @@ def seed_rekeyed_annotations():
             continue
         candidates = set()
         for context in items[(word, reading)]["contexts"]:
-            candidates.update(previous_annotations.get((word, context), set()))
+            candidates.update(
+                annotation for annotation in previous_annotations.get((word, context), set())
+                if dictionary_ok(word, validate(word, annotation), reading))
         if len(candidates) != 1:
             global_candidates = by_word.get(word, set())
             if len(global_candidates) == 1:
@@ -257,7 +298,7 @@ def seed_rekeyed_annotations():
                 if len(matching) == 1:
                     candidates = matching
         if len(candidates) == 1:
-            C37F[direct_key] = next(iter(candidates))
+            C_FURIGANA[direct_key] = next(iter(candidates))
             seeded += 1
         elif len(candidates) > 1:
             ambiguous += 1
@@ -285,19 +326,29 @@ PROMPT_HEAD = (
     "담당하는 요미카타+ー 로 축약될 수 있다. "
     "단어 전체를 표준 읽기로 표기하되, 괄호 안 읽기와 바깥 가나를 합친 전체 읽기에는 yomi 가 들어가야 한다.\n"
     "- ko 는 단어의 뜻이다. 뜻에 맞는 올바른 읽기를 고르라. 잘못된 읽기(당체독음 착오 등) 금지.\n"
+    "- **dict 가 주어지면 그것이 사전에 실린 이 단어의 읽기다.** 괄호 안 읽기와 괄호 밖 가나를 "
+    "이어 붙인 전체 읽기는 dict 중 하나와 **글자 하나까지 같아야** 한다(연탁과 촉음 포함). "
+    "yomi 와 dict 가 어긋나면 dict 를 따른다. 예: 上積み dict [うわづみ] -> 上積(うわづ)み\n"
     "- \"w\" 는 입력 단어를 글자 하나도 바꾸지 않고 그대로 유지한다. 괄호 삽입만 허용된다.\n"
     "- 출력은 JSON 객체 {\"results\": [{\"i\": 번호, \"w\": 단어, \"ja\": 결과}]} 하나뿐이다. 설명 금지.\n\n")
 
 BATCH = 60
+
+def with_dictionary(row):
+    """사전 읽기가 있으면 질의 줄에 싣는다.  모델이 그중에서 고르게 한다."""
+    known = dictionary_readings(row["w"], row.get("yomi"))
+    if known:
+        row["dict"] = known
+    return row
 
 def run_batches(targets):
     """targets: [(w, rd)] -> {(w,rd): ja 또는 None}. None 은 규칙 위반(재시도 필요)."""
     out = {}
     t0 = time.time()
     for bi, group in enumerate(chunk(targets, BATCH)):
-        arr_in = [{"i": i + 1, "w": w, "yomi": rd,
-                   "ko": items[(w, rd)]["ko"],
-                   "context": ", ".join(items[(w, rd)]["contexts"])}
+        arr_in = [with_dictionary({"i": i + 1, "w": w, "yomi": rd,
+                                   "ko": items[(w, rd)]["ko"],
+                                   "context": ", ".join(items[(w, rd)]["contexts"])})
                   for i, (w, rd) in enumerate(group)]
         prompt = PROMPT_HEAD + json.dumps(arr_in, ensure_ascii=False)
         try:
@@ -320,7 +371,7 @@ def run_batches(targets):
                 ja, warn = judge(key[0], key[1], ja)
                 if ja is not None and warn is None:
                     out[key] = ja
-                    C37F[f"{key[0]}|{key[1]}"] = ja
+                    C_FURIGANA[f"{key[0]}|{key[1]}"] = ja
                     n_ok += 1
                 else:
                     out[key] = None       # 구조 위반/읽기 불일치 — 재시도
@@ -334,8 +385,8 @@ def run_batches(targets):
 def judge(w, rd, ja):
     """(ja, warn) 반환. 규칙 위반이면 (None, None). 읽기 불일치면 warn 문자열."""
     v = validate(w, ja)
-    if v is None:
-        return None, None
+    if v is None or not dictionary_ok(w, v, rd):
+        return None, None             # 구조 위반이거나 사전과 다르다 — 다시 묻는다
     if reading_ok(v["all"], rd):
         return ja, None
     return ja, f"읽기키 미일치(yomi={rd}, 복원={v['all']})"
@@ -348,13 +399,14 @@ retry = [k for k, v in result.items() if v is None]
 if retry:
     print("규칙 위반 재시도:", len(retry))
     def build_fix_prompt(group):
-        arr_in = [{"i": i + 1, "w": w, "yomi": rd,
-                   "ko": items[(w, rd)]["ko"],
-                   "context": ", ".join(items[(w, rd)]["contexts"])}
+        arr_in = [with_dictionary({"i": i + 1, "w": w, "yomi": rd,
+                                   "ko": items[(w, rd)]["ko"],
+                                   "context": ", ".join(items[(w, rd)]["contexts"])})
                   for i, (w, rd) in enumerate(group)]
         return (PROMPT_HEAD
                 + "이전 응답 중 아래 항목들은 규칙을 어겼다. 원인: 괄호 누락/위치 오류, "
-                  "yomi 와 불일치, 단어 변경. 이번엔 반드시 규칙대로 출력하라.\n\n"
+                  "yomi 와 불일치, 단어 변경, **dict 와 다른 전체 읽기**. "
+                  "이번엔 반드시 규칙대로 출력하라.\n\n"
                 + json.dumps(arr_in, ensure_ascii=False))
     t0 = time.time()
     for bi, group in enumerate(chunk(retry, BATCH)):
@@ -377,7 +429,7 @@ if retry:
             if ja2 is not None:
                 fixed[key] = warn or ""
                 result[key] = ja2
-                C37F[f"{w}|{rd}"] = ja2
+                C_FURIGANA[f"{w}|{rd}"] = ja2
         dump_json_atomic(CACHE_FILE, CACHE, 1)
         el = time.time() - t0
         print(f"[fix {bi+1}] {len(group)}개 | 복구 {len([k for k in group if k in fixed])} | {el:.0f}s")
@@ -406,9 +458,9 @@ if bad:
     rescue_ok = {}
     t0 = time.time()
     for bi, group in enumerate(chunk([k for k in bad if templates[k][1] > 0], BATCH)):
-        arr_in = [{"i": n + 1, "w": w, "template": templates[(w, rd)][0],
-                   "yomi": rd, "ko": items[(w, rd)]["ko"],
-                   "context": ", ".join(items[(w, rd)]["contexts"])}
+        arr_in = [with_dictionary({"i": n + 1, "w": w, "template": templates[(w, rd)][0],
+                                   "yomi": rd, "ko": items[(w, rd)]["ko"],
+                                   "context": ", ".join(items[(w, rd)]["contexts"])})
                   for n, (w, rd) in enumerate(group)]
         prompt = (
             "너는 일본어 사전 편찬자다. 아래 각 단어의 template 에서 (READn) 자리에만 "
@@ -416,6 +468,7 @@ if bad:
             "규칙:\n"
             "- (READn) 자리 외에는 어떤 글자도 추가/삭제/변경하지 마라. 전각 괄호（…）는 절대 보존한다.\n"
             "- yomi 는 읽기 참고힌트(활용어간 축약 포함), ko 는 뜻이다. 이에 맞는 올바른 읽기를 쓰라.\n"
+            "- dict 가 주어지면 완성된 전체 읽기는 dict 중 하나와 글자 하나까지 같아야 한다.\n"
             "- 출력은 JSON 객체 {\"results\": [{\"i\": 번호, \"ja\": 완성된 문자열}]} 하나뿐이다.\n\n"
             + json.dumps(arr_in, ensure_ascii=False))
         try:
@@ -435,7 +488,7 @@ if bad:
                 rescue_ok[key] = warn or ""
                 fixed[key] = warn or ""
                 result[key] = ja2
-                C37F[f"{w}|{rd}"] = ja2
+                C_FURIGANA[f"{w}|{rd}"] = ja2
         dump_json_atomic(CACHE_FILE, CACHE, 1)
         el = time.time() - t0
         print(f"[rescue {bi+1}] {len(group)}개 | 복구 {len([k for k in group if k in rescue_ok])} | {el:.0f}s")
@@ -445,7 +498,7 @@ seen_warn = set()
 for (w, rd), msg in sorted({k: v for k, v in fixed.items() if v}.items()):
     if (w, rd) not in seen_warn and result.get((w, rd)):
         seen_warn.add((w, rd))
-        print(f"경고(구조 통과, 읽기키 불일치 — 저장함): {w} | {rd} | {C37F.get(f'{w}|{rd}')}")
+        print(f"경고(구조 통과, 읽기키 불일치 — 저장함): {w} | {rd} | {C_FURIGANA.get(f'{w}|{rd}')}")
 for w, rd in bad:
     if not result.get((w, rd)):
         print("요미가나 확정 실패:", w, "|", rd)
@@ -456,16 +509,19 @@ n_empty = 0
 n_invalid = 0
 n_except = 0
 n_except_mismatch = 0
+n_dictionary_mismatch = 0
 for kanji, v in data.items():
     new_rd = {}
     for rd, ws in v["readings"].items():
         out = []
         for x in ws:
-            ja = C37F.get(f"{x['w']}|{rd}", result.get((x["w"], rd)) or "")
+            ja = C_FURIGANA.get(f"{x['w']}|{rd}", result.get((x["w"], rd)) or "")
             if not ja:
                 n_empty += 1
             elif validate(x["w"], ja) is None:
                 n_invalid += 1
+            elif not dictionary_ok(x["w"], validate(x["w"], ja), rd):
+                n_dictionary_mismatch += 1
             # 별도 필드가 아니라 표기 자체에 후리가나를 싣는다.
             out.append({"w": ja or x["w"], "ko": x.get("ko", "")})
         new_rd[rd] = out
@@ -474,13 +530,15 @@ for kanji, v in data.items():
     for rd, ws in v["except"].items():
         out = []
         for x in ws:
-            ja = C37F.get(f"{x['w']}|{rd}", result.get((x["w"], rd)) or "")
+            ja = C_FURIGANA.get(f"{x['w']}|{rd}", result.get((x["w"], rd)) or "")
             if not ja:
                 n_empty += 1
             else:
                 parsed = validate(x["w"], ja)
                 if parsed is None:
                     n_invalid += 1
+                elif not dictionary_ok(x["w"], parsed, rd):
+                    n_dictionary_mismatch += 1
                 elif not reading_ok(parsed["all"], rd):
                     n_except_mismatch += 1
             out.append({"w": ja or x["w"], "ko": x.get("ko", "")})
@@ -490,14 +548,16 @@ for kanji, v in data.items():
     n_embed += 1
 
 dump_json_atomic(CACHE_FILE, CACHE, 1)
-if n_empty or n_invalid or n_except_mismatch:
+if n_empty or n_invalid or n_except_mismatch or n_dictionary_mismatch:
     raise RuntimeError(
         "요미가나 정상화 실패: "
         f"공란 {n_empty}개, 구조 오류 {n_invalid}개, "
-        f"특례 읽기 불일치 {n_except_mismatch}개 — 다시 실행해 cache를 보완한다")
+        f"특례 읽기 불일치 {n_except_mismatch}개, 사전 불일치 {n_dictionary_mismatch}개"
+        " — 다시 실행해 cache를 보완한다")
 # 용례 순서는 여기서 확정한다. 편집기 저장 경로도 같은 규칙을 쓴다.
 ordering.sort_payload(data)
 dump_json_atomic(paths.D5_JAPANESE, data, 2)
 print(
     f"data_japanese.json written: {len(data)} | 특례 {n_except} | "
-    f"후리가나 공란 {n_empty} | 구조 오류 {n_invalid} | 특례 읽기 불일치 {n_except_mismatch}")
+    f"후리가나 공란 {n_empty} | 구조 오류 {n_invalid} | 특례 읽기 불일치 {n_except_mismatch}"
+    f" | 사전 불일치 {n_dictionary_mismatch}")

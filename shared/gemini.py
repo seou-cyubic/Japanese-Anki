@@ -21,7 +21,7 @@ from typing import Any, Iterable, Iterator
 import google.auth.transport.requests
 from google.oauth2 import service_account
 
-MODEL = "gemini-3.7-flash"
+MODEL = "gemini-3.8-flash"
 REGION = "global"
 SCOPES = ["https://www.googleapis.com/auth/cloud-platform"]
 
@@ -85,19 +85,42 @@ def _shared_store(path: Path) -> dict:
 class Cache:
     """``{모델: {용도: {키: 값}}}`` 디스크 캐시.  용도 하나를 dict 처럼 다룬다."""
 
-    def __init__(self, path, purpose: str, model: str = MODEL):
+    def __init__(self, path, purpose: str, model: str = MODEL,
+                 fallback_models: Iterable[str] = ()):
+        """``fallback_models`` 는 **읽기만 하는** 옛 모델 칸이다.
+
+        모델을 바꾸면 칸이 갈리므로 새 칸만 보면 이미 받은 답을 전부 다시 묻게 된다.
+        새 칸에 없는 열쇠는 옛 칸에서 찾아 주고, 쓰기는 언제나 새 칸에만 한다.
+        """
         self.path = Path(path)
         self.all = _shared_store(self.path)
         self.slot = self.all.setdefault(model, {}).setdefault(purpose, {})
+        self.fallbacks = [self.all.get(older, {}).get(purpose, {})
+                          for older in fallback_models if older != model]
+        self.revoked: set[str] = set()     # 무른 열쇠는 옛 칸에서도 찾지 않는다
+
+    def _lookup(self, key: str) -> tuple[bool, Any]:
+        if key in self.slot:
+            return True, self.slot[key]
+        if key in self.revoked:
+            return False, None
+        for older in self.fallbacks:
+            if key in older:
+                return True, older[key]
+        return False, None
 
     def __contains__(self, key: str) -> bool:
-        return key in self.slot
+        return self._lookup(key)[0]
 
     def __getitem__(self, key: str) -> Any:
-        return self.slot[key]
+        found, value = self._lookup(key)
+        if not found:
+            raise KeyError(key)
+        return value
 
     def __setitem__(self, key: str, value: Any) -> None:
         self.slot[key] = value
+        self.revoked.discard(key)
 
     def __delitem__(self, key: str) -> None:
         """답을 무를 수 있어야 한다.
@@ -107,9 +130,11 @@ class Cache:
         데이터에 영영 닿지 못한다.  버릴 수 있어야 다시 물을 수 있다.
         """
         self.slot.pop(key, None)
+        self.revoked.add(key)
 
     def get(self, key: str, default: Any = None) -> Any:
-        return self.slot.get(key, default)
+        found, value = self._lookup(key)
+        return value if found else default
 
     def __len__(self) -> int:
         return len(self.slot)

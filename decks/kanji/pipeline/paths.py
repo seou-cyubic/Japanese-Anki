@@ -41,6 +41,7 @@ D2_KOREAN = DATA / "data_korean.json"
 D3_EXAMPLE = DATA / "data_example.json"
 D4_TRANSLATE = DATA / "data_translate.json"
 D5_JAPANESE = DATA / "data_japanese.json"
+D4_CLAUDE_REVIEW = DATA / "claude_review.json"   # 용례 뜻 마지막 감수 (Claude)
 
 # --- 중간 ---
 S1_JOYO = TMP / "s1_joyo.json"               # 본표 4열 원문 + 付表 페어
@@ -50,6 +51,6 @@ __all__ = [
     "JOYO_PDF", "JOYO_OLD_PDF", "HYOGAI_PDF", "HYOGAI_DATA_PDF",
     "SCHOOL_TXT", "HYOGAI_TXT", "KOREAN_XLS",
     "JMDICT", "BCCWJ", "UNIHAN", "GEMINI_KEY",
-    "CACHE", "D1_RAW", "D2_KOREAN", "D3_EXAMPLE", "D4_TRANSLATE", "D5_JAPANESE",
+    "CACHE", "D1_RAW", "D2_KOREAN", "D3_EXAMPLE", "D4_TRANSLATE", "D5_JAPANESE", "D4_CLAUDE_REVIEW",
     "S1_JOYO",
 ]

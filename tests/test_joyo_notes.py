@@ -114,10 +114,18 @@ class ProductionNoteTest(unittest.TestCase):
         self.assertEqual(validate_payload(self.payload)[:5], [])
 
     def test_the_reading_the_table_hides_is_now_carried(self) -> None:
-        """``観音`` 을 ``カンノン`` 으로 읽는다는 사실은 備考 에만 있다."""
-        carried = self.payload["音"].get("note") or []
-        self.assertIn({"kind": "special_reading", "of": "オン",
-                       "word": "観音", "reading": "カンノン"}, carried)
+        """``観音`` 을 ``カンノン`` 으로 읽는다는 사실은 備考 에만 있다.
+
+        그 '특별한 읽기' 는 학습자에게 付表 의 숙자훈과 다를 것이 없으므로 **예외 칸**에
+        싣는다(``雨`` 의 はるさめ·こさめ·きりさめ 도 같다).  옮긴 것은 備考 에 두 번 남기지 않는다.
+        """
+        record = self.payload["音"]
+        self.assertEqual([example["w"] for example in record["except"].get("かんのん", [])],
+                         ["観音(かんのん)"])
+        self.assertNotIn("special_reading",
+                         {entry["kind"] for entry in record.get("note") or ()})
+        rain = {key for key in self.payload["雨"]["except"]}
+        self.assertTrue({"はるさめ", "こさめ", "きりさめ"} <= rain, rain)
 
     def test_notes_never_leak_into_the_examples(self) -> None:
         """備考 에서 나온 낱말이 용례 칸에 들어가 있으면 안 된다.
