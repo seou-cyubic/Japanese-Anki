@@ -1,23 +1,100 @@
-/* 디자인 토큰 — 화면과 Anki 가 **같은 값을 한 곳에서** 읽는다.
+/* SP 定本版 (Definitive Edition) — 디자인 토큰.
  *
- * 예전에는 이 블록이 한자 덱의 card.css 안에 있었다.  그래서 문법 덱의 card.css 가
- * 한자 덱의 파일에 얹혀 있었고(--ink-4·--warn·--reveal-ease), Anki 쪽은 같은 값을
- * 손으로 옮겨 적고 있었다.  토큰을 여기 하나로 모아 두면 셋이 어긋날 수 없다.
+ * app/static/tokens.css 의 갈아 끼우기용 대체본이다.  편집기 셸(style.css)도 이
+ * 파일을 읽으므로 **기존 토큰 이름은 하나도 바꾸지 않았다**
+ * (--paper --ink --ink-2..4 --line --line-2 --accent --bad --warn --jp --kr
+ * --reveal-ease).  값을 바꾸고 새 토큰을 덧붙였다.
  *
- * 덱 고유의 치수(예: 한자 덱의 --example-kanji)는 그 덱의 card.css 에 남는다. */
+ * 원칙 세 가지.
+ *   1. 따뜻한 무채색 종이와 먹.  하루 수백 장을 넘기는 SRS 에서 눈이 지치지 않는 바탕.
+ *   2. **색은 朱 하나.**  세 덱 모두에서 朱 은 「여기를 보라」 한 가지 뜻만 진다 —
+ *      한자는 付表 특례와 쓰기 빈칸, 문법은 문형 구간, 토익은 가장 자주 나오는 뜻(01).
+ *   3. 갈래(음·훈·활용, 품사)는 색이 아니라 **마커의 모양**(■ □ ◩ ◆)으로 가른다.
+ *      흑백 인쇄·색각 차이·야간 모드 어디서나 같게 읽힌다.
+ *
+ * 외부 글꼴을 부르지 않는다 — 편집기 CSP(style-src 'self')와 오프라인 Anki. */
 
 :root {
-  --paper: oklch(0.965 0.004 85);
-  --ink: oklch(0.22 0.004 85);
-  --ink-2: oklch(0.34 0.004 85);
-  --ink-3: oklch(0.56 0.004 85);
-  --ink-4: oklch(0.62 0.004 85);
-  --line: oklch(0.9 0.004 85);
-  --line-2: oklch(0.93 0.004 85);
-  --accent: oklch(0.54 0.095 248);
-  --bad: oklch(0.52 0.16 26);
-  --warn: oklch(0.64 0.13 78);
-  --jp: "Noto Sans JP", "Yu Gothic", "Meiryo", sans-serif;
-  --kr: "Noto Sans KR", "Malgun Gothic", sans-serif;
-  --reveal-ease: opacity 320ms cubic-bezier(0.4, 0, 0.2, 1);
+  /* 종이 */
+  --paper: #F5F4F0;          /* 카드를 얹는 바탕 */
+  --surface: #FFFFFF;        /* 카드 */
+  --sunken: #F7F6F2;         /* 카드 안의 오목한 칸 — 해설·備考 */
+  --wash: #EFEDE8;           /* 중립 표찰 */
+
+  /* 먹 — 순흑을 쓰지 않는다 */
+  --ink: #25231F;
+  --ink-2: #4D4A44;
+  --ink-3: #6F6C65;
+  --ink-4: #9E9B93;
+
+  /* 선 — 1px */
+  --line: #E6E4DE;
+  --line-2: #F0EEE9;
+  --line-strong: #D3D0C8;
+
+  /* 朱 — 이 판의 유일한 색 */
+  --shu: #C2472E;            /* 면·선 */
+  --shu-ink: #AE3A22;        /* 흰 종이 위 글자 (대비 5.4:1) */
+  --shu-wash: #FBEAE4;       /* 옅은 바탕 */
+  --shu-line: #EDB9AC;
+  --highlight: #F8D9CF;      /* 문법 구간 형광펜 */
+
+  /* 편집기 전용.  카드는 쓰지 않는다 — 초점·선택 표시가 朱 이면 오류처럼 읽힌다. */
+  --accent: #2F5F8C;
+  --bad: #A8322D;
+  --warn: #8F6200;
+  --warn-wash: #F8EFD9;
+
+  /* 田字格 안내선과 연습판 종이.  연습판은 야간에도 밝다 — card.js 가 획을 먹색으로 긋는다. */
+  --guide: #E3DFD6;
+  --pad-paper: #FCFBF8;
+  --pad-guide: #E6D9D2;
+
+  /* 글꼴 */
+  --jp: "Noto Sans JP", "Hiragino Sans", "BIZ UDPGothic", "Yu Gothic", "YuGothic", "Meiryo", sans-serif;
+  --kr: "Pretendard", "Noto Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+  /* 교과서체 — 획의 모양이 손글씨의 바른 꼴이다.  쓰기 카드의 표제자에 쓴다. */
+  --kyo: "UD Digi Kyokasho N-R", "UD デジタル 教科書体 N-R", "UD Digi Kyokasho NK-R", "YuKyokasho",
+         "Klee One", "Hiragino Mincho ProN", "Yu Mincho", "Noto Serif JP", serif;
+  --serif-jp: "Hiragino Mincho ProN", "Yu Mincho", "YuMincho", "Noto Serif JP", "MS PMincho", serif;
+  --en: "Segoe UI Variable Text", "Segoe UI", "SF Pro Text", "Helvetica Neue", Arial, sans-serif;
+  --en-display: "Segoe UI Variable Display", "Segoe UI", "SF Pro Display", "Helvetica Neue", Arial, sans-serif;
+  --mono: "Cascadia Mono", "SF Mono", "JetBrains Mono", Consolas, ui-monospace, monospace;
+
+  --radius: 14px;
+  --radius-inner: 8px;
+  /* 앞뒤 전환은 visibility 로 한다.  visibility 는 보간되지 않으므로 즉시 바뀐다. */
+  --reveal-ease: visibility 0s linear;
+  --press: transform 120ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+/* Anki 야간 모드.  Anki 가 카드 몸체에 nightMode(데스크톱)·night_mode(AnkiDroid)를
+ * 붙인다.  카드 CSS 는 색을 전부 토큰으로 읽으므로 여기서 값만 뒤집는다.
+ * 편집기에는 이 클래스가 없으므로 셸은 언제나 주간이다. */
+.nightMode,
+.night_mode {
+  --paper: #1A1917;
+  --surface: #22211E;
+  --sunken: #1D1C1A;
+  --wash: #2E2C29;
+
+  --ink: #ECEAE4;
+  --ink-2: #C9C6BE;
+  --ink-3: #9D9A92;
+  --ink-4: #75726B;
+
+  --line: #36342F;
+  --line-2: #2C2A27;
+  --line-strong: #4A4740;
+
+  --shu: #E0694F;
+  --shu-ink: #F08C73;
+  --shu-wash: #3A2520;
+  --shu-line: #6B3A2E;
+  --highlight: rgba(224, 105, 79, 0.24);
+
+  --warn: #E2BC6A;
+  --warn-wash: #3A3120;
+
+  --guide: #3A3833;
 }

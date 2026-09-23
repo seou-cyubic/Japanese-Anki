@@ -1,20 +1,43 @@
+/* SP 定本版 — 한자 카드.  decks/kanji/static/card.css 의 갈아 끼우기용 대체본.
+ *
+ * card.js 는 한 줄도 바꾸지 않는다.  같은 DOM 에 옷만 갈아입힌다.
+ *
+ *   한자 · 읽기                                              앞면   ← 면 머리 (::before/::after)
+ *   ┌──┬──┐
+ *   │  今  │  이제 금                                                ← 田字格 + 교과서체, 훈음
+ *   └──┴──┘  [亞 康熙字典体]
+ *   ─────────────────────────────────────────────────────────
+ *   ■ コン          음독         □ いま           훈독               ← 갈래 마커 (모양) + 이름
+ *    │ こんにち                    │ いま
+ *    │ 今日 ··········· 오늘날      │ 今 ·············· 지금          ← 점선 리더
+ *   ◆ 특별한 읽기 · 付表                                            ← 朱 은 특례에만
+ *
+ * 공용 토큰은 tokens.css 에 있다.  여기에는 한자 덱 고유의 치수만 둔다. */
+
 :root {
-  /* 공용 토큰은 app/static/tokens.css 에 있다.  여기에는 한자 덱 고유의 치수만 둔다. */
   /* 용례 한자 한 칸의 크기.  후리가나 배율은 전부 이 값에서 파생된다. */
   --example-kanji: 23px;
 }
 
+/* 편집기는 style.css 의 `* { box-sizing: border-box }` 아래에서 그리지만 Anki 에는
+ * 그 규칙이 없다.  그래서 `max-width: 100%` 에 안쪽 여백이 더해져 좁은 화면에서
+ * 카드가 옆으로 넘쳤다(375px 에서 +22px).  카드가 스스로 정한다. */
+.kanji-card,
+.kanji-card *,
+.kanji-card *::before,
+.kanji-card *::after { box-sizing: border-box; }
+
 .kanji-card {
+  position: relative;
   width: 880px;
   max-width: 100%;
   margin: 0 auto;
-  padding: 60px 64px 56px;
-  border: 1px solid oklch(0.9 0.004 85);
-  border-radius: 4px;
-  background: #fff;
-  box-shadow:
-    0 1px 2px rgba(0, 0, 0, 0.03),
-    0 14px 36px -20px rgba(0, 0, 0, 0.18);
+  padding: 72px 60px 56px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: 0 1px 2px rgba(60, 50, 30, 0.04), 0 18px 40px -28px rgba(60, 50, 30, 0.22);
 }
 
 .preview-card {
@@ -23,29 +46,106 @@
 }
 
 .preview-card:focus-visible {
-  outline: 2px solid oklch(0.72 0.09 248);
+  outline: 2px solid var(--accent);
   outline-offset: 4px;
 }
 
-/* 한자 원문 옆에 작은 글씨 두 줄이 붙는다.
- *   ★★ ☆☆☆☆   위: 한국어 음훈
- *   ★★ ○○○○   아래: 이체자                */
+/* 면 머리 — 지금 무엇을 묻는 면인지.  Anki 는 카드 종류를 화면에 드러내지 않으므로
+ * 읽기와 쓰기를 섞어 돌릴 때 이 한 줄이 유일한 표지다.  편집 카드에는 모드
+ * 클래스가 없으므로 뜨지 않는다. */
+.kanji-card.reading-front::before,
+.kanji-card.reading-back::before,
+.kanji-card.writing-front::before,
+.kanji-card.writing-back::before {
+  position: absolute;
+  top: 26px;
+  left: 60px;
+  color: var(--ink-3);
+  font-family: var(--kr);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  line-height: 1;
+}
+.kanji-card.reading-front::before,
+.kanji-card.reading-back::before { content: "한자  \00B7  읽기"; }
+.kanji-card.writing-front::before,
+.kanji-card.writing-back::before { content: "한자  \00B7  쓰기"; }
+
+.kanji-card.reading-front::after,
+.kanji-card.reading-back::after,
+.kanji-card.writing-front::after,
+.kanji-card.writing-back::after {
+  position: absolute;
+  top: 20px;
+  right: 60px;
+  padding: 5px 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--ink-3);
+  font-family: var(--kr);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  line-height: 1;
+}
+.kanji-card.reading-front::after,
+.kanji-card.writing-front::after { content: "앞면"; }
+.kanji-card.reading-back::after,
+.kanji-card.writing-back::after {
+  content: "뒷면";
+  border-color: transparent;
+  background: var(--wash);
+  color: var(--ink-2);
+}
+
+/* 갈래 이름(음독·훈독…)은 화면 낭독기를 위한 것이다.  원본에서는 편집기의 style.css
+ * 에만 정의되어 **Anki 에서는 글자가 새어 나왔다.**  카드 안에서 스스로 숨긴다. */
+.kanji-card .sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  border: 0;
+  white-space: nowrap;
+}
+
+/* ── 머리 ──────────────────────────────────────────────────────────────
+ * 田字格 속 교과서체 표제자 | 훈음(두 번째로 큰 글자) · 이체자 */
 .kc-head {
   display: flex;
   align-items: center;
-  gap: 20px;
-  padding-bottom: 34px;
-  border-bottom: 1px solid oklch(0.93 0.004 85);
+  gap: 32px;
+  padding-bottom: 36px;
+  border-bottom: 1px solid var(--line);
 }
 
+/* 田字格.  십자 안내선은 배경으로 긋는다.  쓰기 앞면에서는 글자가 사라지고 이
+ * 칸이 곧 '여기에 쓰시오' 가 된다. */
 .kc-character {
-  flex: 0 0 auto;
-  color: oklch(0.22 0.004 85);
-  font-family: var(--jp);
-  font-size: 104px;
+  display: flex;
+  width: 148px;
+  height: 148px;
+  flex: 0 0 148px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-inner);
+  background-color: var(--surface);
+  background-image:
+    repeating-linear-gradient(90deg, var(--guide) 0 5px, transparent 5px 9px),
+    repeating-linear-gradient(0deg, var(--guide) 0 5px, transparent 5px 9px);
+  background-position: center 50%, 50% center;
+  background-size: 100% 1px, 1px 100%;
+  background-repeat: no-repeat;
+  color: var(--ink);
+  font-family: var(--kyo);
+  font-size: 112px;
   font-weight: 400;
-  letter-spacing: 0.02em;
-  line-height: 0.9;
+  line-height: 1;
 }
 
 .kc-side {
@@ -54,15 +154,17 @@
   flex: 1 1 auto;
   flex-direction: column;
   justify-content: center;
-  gap: 7px;
+  gap: 12px;
 }
 
 .kc-korean {
   min-width: 0;
-  color: oklch(0.34 0.004 85);
+  color: var(--ink);
   font-family: var(--kr);
-  font-size: 16px;
-  letter-spacing: 0.01em;
+  font-size: 24px;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  line-height: 1.35;
 }
 
 .kc-variants {
@@ -70,30 +172,44 @@
   min-width: 0;
   flex-wrap: wrap;
   align-items: baseline;
-  gap: 10px;
+  gap: 8px;
 }
 
 .kc-variant {
   display: inline-flex;
   align-items: baseline;
-  gap: 4px;
-  color: oklch(0.34 0.004 85);
-  font-family: var(--jp);
-  font-size: 16px;
+  gap: 6px;
+  padding: 3px 10px 3px 9px;
+  border-radius: 6px;
+  background: var(--wash);
+  color: var(--ink);
+  font-family: var(--kyo);
+  font-size: 18px;
+  line-height: 1.4;
 }
 
-.kc-variant.none { color: var(--ink-4); font-family: var(--kr); font-size: 12px; }
-
-.kc-variant-label {
+.kc-variant.none {
+  padding: 0;
+  background: none;
   color: var(--ink-4);
   font-family: var(--kr);
-  font-size: 11px;
+  font-size: 12.5px;
 }
 
-/* 가리기 규칙은 **반드시 .kanji-card 안쪽으로 한정한다.**  편집기는 덱을 오갈 때
- * 두 덱의 card.css 를 모두 싣고 지우지 않으므로, 한정하지 않으면 이 규칙이 문법
- * 카드까지 가린다.  Anki 는 한 덱의 CSS 만 실으니 그쪽에서는 가려지지 않아,
- * **화면과 Anki 가 다르게 보이는 원인**이 된다. */
+.kc-variant-label {
+  color: var(--ink-3);
+  font-family: var(--kr);
+  font-size: 11px;
+  letter-spacing: 0.02em;
+}
+
+/* ── 카드 면 ────────────────────────────────────────────────────────────
+ * 가리기 규칙은 **반드시 .kanji-card 안쪽으로 한정한다.**  편집기는 덱을 오갈 때
+ * 여러 덱의 card.css 를 모두 싣고 지우지 않으므로, 한정하지 않으면 이 규칙이
+ * 다른 덱 카드까지 가린다.
+ *
+ * 한자 덱도 문법·토익처럼 **visibility** 로 가린다.  원본은 opacity 였는데, 한자
+ * 덱은 루비를 쓰지 않아 시험이 요구하지 않았을 뿐이다.  세 덱의 방법이 같아졌다. */
 .kanji-card .reveal-korean,
 .kanji-card .reveal-reading,
 .kanji-card .reveal-furigana,
@@ -102,49 +218,69 @@
 .kanji-card.reading-front .reveal-korean,
 .kanji-card.reading-front .reveal-reading,
 .kanji-card.reading-front .reveal-furigana,
-.kanji-card.reading-front .reveal-meaning { opacity: 0; }
+.kanji-card.reading-front .reveal-meaning { visibility: hidden; }
 
-/* 쓰기 덱 앞면은 정답 한자를 '　' 로 바꾼 것과 같은 상태로 둔다.  글자만 감추고
- * 칸은 그대로 두므로 배치가 흔들리지 않고, 뒤집기는 클래스 토글로 끝난다. */
-.kanji-card .answer-char { transition: var(--reveal-ease); }
+/* 쓰기 앞면 — 書き取り 문제.  정답 한자는 글자만 숨고(칸은 남는다) 그 자리에 朱
+ * 점선 빈칸이 선다.  빈칸은 글자가 없는 `::after` 라 답이 새지 않는다.  부모가
+ * hidden 이어도 자식이 visible 로 되돌리면 보이는 것이 visibility 의 규칙이다. */
+.kanji-card .answer-char { position: relative; transition: var(--reveal-ease); }
 .kanji-card.writing-front .answer-char { visibility: hidden; }
+.kanji-card.writing-front .answer-char::after {
+  content: "";
+  position: absolute;
+  inset: 0.12em 0.05em 0.04em;
+  border: 1.5px dashed var(--shu);
+  border-radius: 3px;
+  background: var(--shu-wash);
+  visibility: visible;
+}
+/* 표제자 자리는 田字格 이 이미 빈칸이다.  두 겹으로 그리지 않는다. */
+.kanji-card.writing-front .kc-character .answer-char::after { content: none; }
 
-/* 한자 원문 섹션의 오른쪽 끝.  마우스로 한자를 직접 써 보는 자리다. */
+/* 연습판 — 표제자와 같은 田字格.  보고 쓰는 칸과 쓰는 칸이 같은 모양이다. */
 .writing-pad {
   display: flex;
   flex: 0 0 auto;
   flex-direction: column;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   margin-left: auto;
 }
 
 .writing-canvas {
-  width: 132px;
-  height: 132px;
-  border: 1px dashed oklch(0.82 0.004 85);
-  border-radius: 6px;
-  background: oklch(0.99 0.002 85);
+  width: 148px;
+  height: 148px;
+  border: 1px solid var(--shu-line);
+  border-radius: var(--radius-inner);
+  background-color: var(--pad-paper);
+  background-image:
+    repeating-linear-gradient(90deg, var(--pad-guide) 0 5px, transparent 5px 9px),
+    repeating-linear-gradient(0deg, var(--pad-guide) 0 5px, transparent 5px 9px);
+  background-position: center 50%, 50% center;
+  background-size: 100% 1px, 1px 100%;
+  background-repeat: no-repeat;
   cursor: crosshair;
   touch-action: none;
 }
 
 .writing-clear {
+  padding: 5px 14px;
   border: 1px solid var(--line);
-  border-radius: 5px;
-  background: transparent;
-  color: var(--ink-4);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--ink-3);
   cursor: pointer;
   font-family: var(--kr);
-  font-size: 11px;
-  padding: 3px 9px;
+  font-size: 11.5px;
+  letter-spacing: 0.04em;
+  transition: color 160ms ease, border-color 160ms ease, var(--press);
 }
 
-.writing-clear:hover { color: var(--ink-2); }
+.writing-clear:hover { color: var(--ink); border-color: var(--line-strong); }
+.writing-clear:active { transform: scale(0.97); }
+.writing-clear:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
-/* X 마커 한 줄에 모든 예외가 모이므로 다른 요미카타보다 길어질 수 있다. */
-.kc-reading.group-exc .reading-label { font-family: var(--jp); }
-
+/* ── 요미카타 ──────────────────────────────────────────────────────── */
 .kc-readings {
   display: flex;
   flex-direction: column;
@@ -155,12 +291,18 @@
 .kc-reading-group {
   display: flex;
   flex-direction: column;
-  gap: 32px;
+  gap: 34px;
+}
+
+/* 갈래가 바뀌는 자리에 가는 선.  음독 → 훈독 → 특례 의 경계가 눈에 선다. */
+.kc-reading-group + .kc-reading-group {
+  padding-top: 40px;
+  border-top: 1px solid var(--line-2);
 }
 
 .kc-reading-row {
   display: flex;
-  gap: 44px;
+  gap: 48px;
 }
 
 .kc-reading {
@@ -168,128 +310,194 @@
   min-width: 0;
   flex: 1 1 0;
   flex-direction: column;
-  gap: 12px;
+  gap: 14px;
 }
 
 .reading-filler { visibility: hidden; }
 
-/* Exact design_sample base hues. The three visible shade steps repeat for
- * production groups longer than the sample's maximum of three. */
+/* 갈래.  색이 아니라 **마커의 모양**으로 가른다 — 인쇄 교재의 기호 문법.
+ *   ■ 음독 = 먹 채움 · □ 훈독 = 먹 테두리 · ◩ 동사 활용 = 반만 채움 · ◆ 특례 = 朱 마름모
+ * 흑백 인쇄·색각 차이·야간 어디서나 모양만으로 갈린다.  제목 줄 오른쪽 끝에 갈래 이름이
+ * 작게 붙어 모양을 처음 보는 사람에게도 뜻을 알린다.
+ * --marker-color / --group 는 편집기 사이드바(style.css)가 읽으므로 정의를 남긴다. */
 .group-on {
-  --marker-color: oklch(0.620 0.115 82);
+  --mark-bg: var(--ink);
+  --mark-border: solid var(--ink);
+  --group-label: "음독";
+  --rail: var(--line-strong);
+  --marker-color: var(--ink-2);
   --group: var(--marker-color);
 }
-.group-on.tone-1 { --marker-color: oklch(0.705 0.071 82); }
-.group-on.tone-2 { --marker-color: oklch(0.790 0.044 82); }
-
 .group-kun {
-  --marker-color: oklch(0.560 0.085 152);
+  --mark-bg: transparent;
+  --mark-border: solid var(--ink);
+  --group-label: "훈독";
+  --rail: var(--line-strong);
+  --marker-color: var(--ink-3);
   --group: var(--marker-color);
 }
-.group-kun.tone-1 { --marker-color: oklch(0.645 0.053 152); }
-.group-kun.tone-2 { --marker-color: oklch(0.730 0.033 152); }
-
 .group-verb {
-  --marker-color: oklch(0.540 0.095 248);
+  --mark-bg: linear-gradient(135deg, var(--ink) 0 50%, transparent 50%);
+  --mark-border: solid var(--ink);
+  --group-label: "동사 활용";
+  --rail: var(--line-strong);
+  --marker-color: var(--ink-3);
   --group: var(--marker-color);
 }
-.group-verb.tone-1 { --marker-color: oklch(0.625 0.059 248); }
-.group-verb.tone-2 { --marker-color: oklch(0.710 0.037 248); }
-
 .group-exc {
-  --marker-color: oklch(0.540 0.125 26);
+  --mark-bg: var(--shu);
+  --mark-border: solid var(--shu);
+  --mark-turn: rotate(45deg) scale(0.86);
+  --group-label: "";
+  --rail: var(--shu-line);
+  --marker-color: var(--shu);
   --group: var(--marker-color);
 }
-.group-exc.tone-1 { --marker-color: oklch(0.625 0.077 26); }
-.group-exc.tone-2 { --marker-color: oklch(0.710 0.048 26); }
-
 .group-invalid {
+  --mark-bg: transparent;
+  --mark-border: dashed var(--bad);
+  --group-label: "미완성";
+  --rail: var(--bad);
   --marker-color: var(--bad);
   --group: var(--marker-color);
 }
 
+/* 같은 갈래가 여럿이면(tone-1, tone-2) 마커만 한 단계씩 물러난다. */
+.tone-1 .reading-dot { opacity: 0.55; }
+.tone-2 .reading-dot { opacity: 0.35; }
+
 .kc-reading-title {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 14px;
+  min-height: 34px;
 }
 
+/* 갈래 이름 — 제목 줄 오른쪽 끝의 작은 글씨.  답이 아니라 문제의 일부이므로 앞면에서도
+ * 보인다.  특례는 제목 자체가 이름이라 붙이지 않는다. */
+.kc-reading-title::after {
+  content: var(--group-label, "");
+  margin-left: auto;
+  color: var(--ink-4);
+  font-family: var(--kr);
+  font-size: 11.5px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+}
+
+/* 마커.  card.js 가 넣는 ● 는 글자 크기 0 으로 접고, 12px 도형 하나를 세운다.
+ * **앞면에서도 보인다** — 음인가 훈인가, 몇 개를 떠올려야 하는가는 문제의 일부다. */
 .reading-dot {
-  width: 14px;
-  flex: 0 0 14px;
-  color: var(--marker-color);
-  font-family: var(--jp);
-  font-size: 10px;
-  line-height: 1;
-  text-align: center;
+  width: 12px;
+  height: 12px;
+  flex: 0 0 12px;
+  border: 1.5px var(--mark-border, solid var(--ink));
+  border-radius: 1.5px;
+  background: var(--mark-bg, transparent);
+  color: transparent;
+  font-size: 0;
+  line-height: 0;
+  overflow: hidden;
+  transform: var(--mark-turn, none);
 }
 
 .reading-label,
 .reading-name {
   min-width: 0;
-  color: oklch(0.3 0.004 85);
+  color: var(--ink);
   font-family: var(--jp);
-  font-size: 30px;
-  font-weight: 400;
+  font-size: 27px;
+  font-weight: 500;
   letter-spacing: 0.06em;
-  line-height: 1.1;
+  line-height: 1.15;
+}
+
+/* 특례는 데이터에서 'X' 한 글자 아래 모인다(§6.4).  화면에서는 그 표지를 사람이
+ * 읽는 말로 바꾼다 — 데이터와 card.js 의 EXCEPTION_MARKER 는 여전히 X 다.
+ * 이것은 답이 아니라 갈래의 이름이므로 **앞면에서도 보인다.** */
+.kc-reading.group-exc .reading-label {
+  font-family: var(--kr);
+  font-size: 0;
+  letter-spacing: 0;
+}
+
+.kc-reading.group-exc .reading-label::before {
+  content: "특별한 읽기";
+  color: var(--shu-ink);
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  visibility: visible;
+}
+
+.kc-reading.group-exc .reading-label::after {
+  content: "  \00B7  付表";
+  color: var(--ink-3);
+  font-family: var(--jp);
+  font-size: 13px;
+  font-weight: 400;
+  visibility: visible;
 }
 
 .reading-body {
   display: flex;
   min-width: 0;
-  gap: 20px;
+  gap: 22px;
 }
 
+/* 레일은 마커의 가운데 세로줄에 선다 — 마커가 레일의 머리다. */
 .reading-line-wrap {
-  width: 14px;
-  flex: 0 0 14px;
   display: flex;
+  width: 12px;
+  flex: 0 0 12px;
   justify-content: center;
 }
 
 .reading-line {
-  width: 2px;
+  width: 1px;
   align-self: stretch;
-  border-radius: 2px;
-  background: var(--marker-color);
-  opacity: 0.9;
+  background: var(--rail, var(--line-strong));
 }
+
+.group-exc .reading-line { width: 2px; border-radius: 2px; }
 
 .words {
   display: flex;
   min-width: 0;
   flex: 1;
   flex-direction: column;
-  gap: 14px;
+  gap: 12px;
 }
 
-/* 뜻은 후리가나 줄이 아니라 한자 줄과 수평으로 놓인다.  **맞추는 것은 첫 줄끼리다** —
- * 뜻이 여럿이면 첫 뜻이 표기와 나란히 서고 나머지가 아래로 흐른다.  마지막 줄끼리
- * 맞추면 번호가 위로 자라 표기보다 높은 자리에서 1 번이 시작한다(뜻 셋짜리 용례가
- * 앞 용례 쪽으로 솟구치던 것이 이것이다).
- *
- * 첫 베이스라인은 그냥 두면 후리가나 줄이다 — `.fseg` 가 세로 플렉스라 그 첫 항목이
- * 후리가나이기 때문이다.  그래서 `.example-spell::before` 로 한자 줄에 앉은 기준선을
- * 하나 심고(폭 0), 그것이 상자의 첫 베이스라인이 되게 한다. */
-/* 용례 한 줄 — 왼쪽에 일본어 표기, 오른쪽에 한국어 뜻.
+/* 용례 한 줄 — 왼쪽에 일본어 표기, 오른쪽에 한국어 뜻, 그 사이를 점선 리더가 잇는다.
  *
  * **`min-width: 0` 을 두지 않는다.**  플렉스 항목의 기본값 `min-width: auto` 가
- * '내용보다 좁아지지 않는다' 는 보호막인데, `0` 으로 덮으면 그 보호막이 사라진다.
- * 그러면 자리가 모자랄 때 표기 칸이 글자 폭 아래로 눌리고, 안쪽 글자는
- * `white-space: nowrap` 이라 줄지 않으므로 **칸 밖으로 흘러 옆 글자와 겹친다** —
- * `書き下ろす` 가 `書き` 와 `下` 를 붙여 찍던 것이 이것이다.
- *
- * 자리가 모자라면 눌리는 대신 **줄을 바꾼다.**  용례 칸은 칸 경계에서, 줄 전체는
- * 뜻을 아래로 내려서 접는다.  글자가 겹치는 것보다 한 줄 늘어나는 편이 언제나 낫다. */
+ * '내용보다 좁아지지 않는다' 는 보호막이다.  덮으면 자리가 모자랄 때 표기 칸이
+ * 글자 폭 아래로 눌리고, `nowrap` 글자가 칸 밖으로 흘러 옆 글자와 겹친다.
+ * 자리가 모자라면 눌리는 대신 **줄을 바꾼다.** */
 .word {
   position: relative;
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
   justify-content: space-between;
-  gap: 18px;
+  gap: 12px;
 }
+
+/* 점선 리더.  빈 상자의 베이스라인은 상자 바닥이므로 `baseline` 정렬만으로 한자
+ * 줄 위에 앉는다.  순서는 표기(0) → 리더(1) → 뜻(2).  편집 카드에서는 발
+ * (`.word-foot`)이 끼므로 뺀다.  앞면에서는 뜻과 함께 물러난다. */
+.kanji-card:not(.edit-card) .word::after {
+  content: "";
+  order: 1;
+  flex: 1 1 24px;
+  align-self: baseline;
+  border-bottom: 1px dotted var(--line-strong);
+  transform: translateY(-0.3em);
+}
+.kanji-card:not(.edit-card) .word > .meaning { order: 2; }
+.kanji-card.reading-front .word::after { visibility: hidden; }
 
 .example-spell {
   display: flex;
@@ -300,10 +508,7 @@
 }
 
 /* 한자 줄에 앉은 폭 0 의 기준선.  **첫 플렉스 항목이어야 한다** — 상자의 첫
- * 베이스라인은 첫 항목에서 나오므로, 이것이 없으면 뜻이 후리가나 줄에 붙는다.
- * `flex-end` 라 바닥이 한자 칸의 바닥과 같고, 글꼴·크기·행간이 `.fseg-word` 와 같으니
- * 베이스라인도 한자 줄과 정확히 겹친다.  덤으로 뜻 개수 뱃지(`.sense-count`)가 마지막
- * 항목이어도 정렬이 흔들리지 않는다 — 그 뱃지는 첫 항목이 아니다. */
+ * 베이스라인은 첫 항목에서 나오므로, 이것이 없으면 뜻이 후리가나 줄에 붙는다. */
 .example-spell::before {
   content: "\200B";
   align-self: flex-end;
@@ -314,8 +519,7 @@
 }
 
 /* 한자 한 칸(들)과 그 위에 얹히는 후리가나가 이루는 단위.
- * 후리가나가 걸리는 단위라 이 안에서는 줄을 바꿀 수 없다 — 줄바꿈은 칸 사이에서만
- * 일어난다(`.example-spell`). */
+ * 이 안에서는 줄을 바꿀 수 없다 — 줄바꿈은 칸 사이에서만 일어난다. */
 .fseg {
   display: flex;
   flex-direction: column;
@@ -324,7 +528,7 @@
 
 .fseg-furi {
   min-height: 15px;
-  color: oklch(0.62 0.004 85);
+  color: var(--ink-3);
   font-family: var(--jp);
   /* 기본값: 한자 한 칸에 후리가나 두 자. */
   font-size: calc(var(--example-kanji) * 0.5);
@@ -334,7 +538,7 @@
 }
 
 .fseg-word {
-  color: oklch(0.26 0.004 85);
+  color: var(--ink);
   font-family: var(--jp);
   font-size: var(--example-kanji);
   font-weight: 400;
@@ -343,8 +547,9 @@
   white-space: nowrap;
 }
 
-/* 후리가나가 한자 칸보다 많을 때 정확히 들어맞도록 줄이는 배율.
- * CSP 가 인라인 스타일을 막으므로 클래스로 낸다.  fr-{한자수}-{후리가나수}. */
+/* 후리가나가 한자 칸보다 많을 때 정확히 들어맞도록 줄이는 배율(§6.1).
+ * CSP 가 인라인 스타일을 막으므로 클래스로 낸다.  fr-{한자수}-{후리가나수}.
+ * 원본에서 글자 그대로 옮겼다. */
 .fr-1-3 .fseg-furi { font-size: calc(var(--example-kanji) * 1 / 3); }
 .fr-1-4 .fseg-furi { font-size: calc(var(--example-kanji) * 1 / 4); }
 .fr-1-5 .fseg-furi { font-size: calc(var(--example-kanji) * 1 / 5); }
@@ -424,23 +629,17 @@
 .fr-6-19 .fseg-furi { font-size: calc(var(--example-kanji) * 6 / 19); }
 .fr-6-20 .fseg-furi { font-size: calc(var(--example-kanji) * 6 / 20); }
 
-/* 용례의 한국어 뜻.  **읽으라고 있는 글자다.**  용례를 보고 뜻이 떠오르는지
- * 확인하는 자리이므로, 곁다리 표시(급수·품사 뱃지)만 한 크기로는 작다.
- * 뜻은 후리가나 줄이 아니라 **한자 줄과 수평**으로 놓인다 — `.word` 의
- * `align-items: baseline` 이 이 상자의 첫 줄을 spell 상자의 첫 베이스라인에 맞추고,
- * 그 첫 베이스라인은 `.example-spell::before` 가 한자 줄에 앉혀 둔다.  베이스라인
- * 정렬은 글자 크기를 타지 않으므로 크기를 키워도 그대로다. */
+/* 용례의 한국어 뜻.  **읽으라고 있는 글자다.**  베이스라인 정렬은 글자 크기를
+ * 타지 않으므로 크기를 키워도 한자 줄과 수평이다. */
 .meaning {
   min-width: 0;
-  color: oklch(0.56 0.004 85);
+  color: var(--ink-2);
   font-family: var(--kr);
   font-size: 17px;
   line-height: 1.55;
   text-align: right;
 }
 
-/* 뜻이 여럿인 용례는 번호를 붙여 줄마다 나눈다.  번호는 뜻보다 흐리게 두어
- * 읽는 눈이 뜻에 먼저 닿게 한다. */
 .meaning-sense {
   display: flex;
   justify-content: flex-end;
@@ -450,44 +649,57 @@
 .sense-no {
   flex: none;
   color: var(--ink-4);
+  font-family: var(--mono);
+  font-size: 0.78em;
   font-variant-numeric: tabular-nums;
 }
 
-/* 용례 옆에 붙는 뜻 개수.  **앞면에서도 보인다** — 무엇을 몇 개 떠올려야 하는지는
- * 정답이 아니라 문제의 일부다.  그래서 `reveal-` 계열에 넣지 않는다.
- * 한자 줄의 위쪽에 어깨번호처럼 붙으므로 `align-self: flex-start` 다. */
+/* 용례 옆에 붙는 뜻 개수.  **앞면에서도 보인다** — 문제의 일부다. */
 .sense-count {
   align-self: flex-start;
-  margin-left: 3px;
-  color: var(--ink-4);
-  font-family: var(--kr);
-  font-size: 11px;
+  margin-left: 4px;
+  padding: 2px 4px;
+  border-radius: 4px;
+  background: var(--wash);
+  color: var(--ink-3);
+  font-family: var(--mono);
+  font-size: 10px;
   font-variant-numeric: tabular-nums;
   line-height: 1;
 }
 
-/* 常用漢字表 본표의 備考.  카드 맨 아래에 한 줄씩 놓인다 — 용례가 아니므로
- * 요미카타 칸에 섞지 않는다.  정답 쪽이라 앞면에서는 `reveal-meaning` 이 가린다. */
+/* 常用漢字表 본표의 備考 — 카드 맨 아래 오목한 칸. */
 .kc-notes {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  margin-top: 26px;
-  padding-top: 18px;
-  border-top: 1px solid var(--line-2);
+  gap: 8px;
+  margin-top: 40px;
+  padding: 16px 22px 18px;
+  border-radius: var(--radius-inner);
+  background: var(--sunken);
   font-size: 14px;
+}
+
+.kc-notes::before {
+  content: "備考";
+  margin-bottom: 2px;
+  color: var(--ink-3);
+  font-family: var(--serif-jp);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.2em;
 }
 
 .kc-note-row {
   display: flex;
   align-items: baseline;
-  gap: 10px;
+  gap: 12px;
 }
 
 .kc-note-of {
   flex: none;
   min-width: 4.5em;
-  color: var(--ink-4);
+  color: var(--ink-3);
   font-family: var(--jp);
   text-align: right;
 }
@@ -495,16 +707,15 @@
 .kc-note-kind {
   flex: none;
   min-width: 8.5em;
-  color: var(--ink-4);
+  color: var(--ink-3);
   font-family: var(--kr);
-  font-size: 12px;
+  font-size: 11.5px;
+  letter-spacing: 0.02em;
 }
 
-.kc-note-body { font-family: var(--jp); }
-
+.kc-note-body { color: var(--ink); font-family: var(--jp); }
 .kc-note-word { margin-right: 8px; }
-
-.kc-note-value { color: var(--ink-4); }
+.kc-note-value { color: var(--ink-3); }
 
 .invalid-annotation {
   color: var(--bad);
@@ -512,7 +723,8 @@
   text-underline-offset: 3px;
 }
 
-/* Edit mode preserves the card geometry while exposing the native controls. */
+/* ── 편집 카드 ────────────────────────────────────────────────────────
+ * Edit mode preserves the card geometry while exposing the native controls. */
 .edit-card { user-select: text; }
 
 .editable-word {
@@ -520,11 +732,9 @@
   padding: 2px 0;
 }
 
-/* 편집기의 표기 칸.  카드의 용례 칸(`.example-spell`)과 같은 이유로 `min-width: 0`
- * 을 두지 않는다 — 눌리면 `white-space: nowrap` 인 글자가 칸 밖으로 흘러 겹친다.
- * 자리가 모자라면 `.editable-word` 가 줄을 바꾼다. */
+/* 편집기의 표기 칸.  `.example-spell` 과 같은 이유로 `min-width` 를 두지 않는다. */
 .spell {
-  color: oklch(0.26 0.004 85);
+  color: var(--ink);
   font-family: var(--jp);
   font-size: 23px;
   font-weight: 400;
@@ -535,13 +745,13 @@
 
 .spell ruby { ruby-align: center; }
 .spell rt {
-  color: oklch(0.62 0.004 85);
+  color: var(--ink-3);
   font-family: var(--jp);
   font-size: 12px;
 }
-.spell .printed-ruby rt { color: oklch(0.48 0.09 278); }
+.spell .printed-ruby rt { color: var(--accent); }
 .spell .printed-ruby {
-  text-decoration: underline dotted oklch(0.72 0.06 278);
+  text-decoration: underline dotted var(--accent);
   text-underline-offset: 4px;
 }
 
@@ -567,7 +777,7 @@
 .editor-tail {
   margin-top: 56px;
   padding-top: 28px;
-  border-top: 1px solid oklch(0.93 0.004 85);
+  border-top: 1px solid var(--line);
 }
 
 .editor-tail-title {
@@ -575,10 +785,11 @@
   align-items: center;
   justify-content: space-between;
   margin-bottom: 18px;
-  color: oklch(0.66 0.004 85);
+  color: var(--ink-4);
   font-family: var(--kr);
-  font-size: 10px;
-  letter-spacing: 0.14em;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
 }
 
 .native-grid {
@@ -596,20 +807,21 @@
 }
 .section-title-row h2 {
   margin: 0;
-  color: var(--ink-4);
+  color: var(--ink-3);
   font-family: var(--kr);
-  font-size: 11px;
-  font-weight: 500;
-  letter-spacing: 0.12em;
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
 }
-.section-count { color: var(--ink-4); font-family: var(--kr); font-size: 11px; }
+.section-count { color: var(--ink-4); font-family: var(--mono); font-size: 11px; }
 .source-badge {
-  padding: 2px 7px;
-  border: 1px solid oklch(0.84 0.05 278);
-  border-radius: 999px;
-  color: oklch(0.48 0.09 278);
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: var(--wash);
+  color: var(--ink-2);
   font-family: var(--kr);
   font-size: 10px;
+  letter-spacing: 0.04em;
 }
 .field-note { margin: 10px 0 0; color: var(--ink-4); font-family: var(--kr); font-size: 11px; }
 
@@ -624,8 +836,8 @@
   gap: 2px;
   padding: 3px 3px 3px 10px;
   border: 1px solid var(--line);
-  border-radius: 999px;
-  background: #fff;
+  border-radius: 6px;
+  background: var(--surface);
   font-family: var(--kr);
   font-size: 13px;
 }
@@ -639,12 +851,14 @@
   min-width: 0;
   padding: 6px 8px;
   border: 1px solid var(--line);
-  border-radius: 3px;
-  background: #fff;
+  border-radius: 6px;
+  background: var(--surface);
   color: var(--ink);
   font-family: var(--jp), var(--kr);
   font-size: 12px;
 }
+.native-row input:focus-visible,
+.native-row select:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .native-row select { width: 100%; }
 .none { padding: 8px 0; color: var(--ink-4); font-family: var(--kr); font-size: 12px; }
 
@@ -652,11 +866,21 @@
   .word-foot { display: flex; }
 }
 
+/* ── 좁은 화면 ─────────────────────────────────────────────────────── */
 @media (max-width: 1050px) {
-  .kanji-card { padding: 48px 36px 44px; }
-  .kc-reading-row { gap: 28px; }
-  .kc-character { font-size: 88px; }
-  .reading-label, .reading-name { font-size: 27px; }
+  .kanji-card { padding: 66px 36px 44px; }
+  .kanji-card.reading-front::before,
+  .kanji-card.reading-back::before,
+  .kanji-card.writing-front::before,
+  .kanji-card.writing-back::before { left: 36px; }
+  .kanji-card.reading-front::after,
+  .kanji-card.reading-back::after,
+  .kanji-card.writing-front::after,
+  .kanji-card.writing-back::after { right: 36px; }
+  .kc-reading-row { gap: 32px; }
+  .kc-character { width: 128px; height: 128px; flex-basis: 128px; font-size: 96px; }
+  .writing-canvas { width: 128px; height: 128px; }
+  .reading-label, .reading-name { font-size: 24px; }
   .word { gap: 10px; }
   /* 한자 칸이 줄면 후리가나도 같은 비율로 따라 줄어든다. */
   .kanji-card { --example-kanji: 20px; }
@@ -665,14 +889,28 @@
 }
 
 @media (max-width: 520px) {
-  .kanji-card { padding: 36px 24px 38px; }
-  .kc-head { gap: 20px; padding-bottom: 26px; }
-  .kc-character { font-size: 72px; }
-  .kc-korean { font-size: 15px; }
-  .kc-readings { gap: 36px; padding-top: 32px; }
-  .kc-reading-row { display: grid; grid-template-columns: 1fr; gap: 28px; }
+  .kanji-card { padding: 56px 18px 28px; border-radius: 12px; }
+  .kanji-card.reading-front::before,
+  .kanji-card.reading-back::before,
+  .kanji-card.writing-front::before,
+  .kanji-card.writing-back::before { top: 22px; left: 18px; }
+  .kanji-card.reading-front::after,
+  .kanji-card.reading-back::after,
+  .kanji-card.writing-front::after,
+  .kanji-card.writing-back::after { top: 16px; right: 18px; }
+  .kc-head { flex-wrap: wrap; gap: 18px; padding-bottom: 24px; }
+  .kc-character { width: 96px; height: 96px; flex-basis: 96px; font-size: 72px; }
+  .kc-korean { font-size: 19px; }
+  .writing-pad { margin-left: 0; }
+  .writing-canvas { width: 112px; height: 112px; }
+  .kc-readings { gap: 32px; padding-top: 28px; }
+  .kc-reading-group + .kc-reading-group { padding-top: 30px; }
+  .kc-reading-row { display: grid; grid-template-columns: minmax(0, 1fr); gap: 28px; }
   .reading-filler { display: none; }
+  .reading-body { gap: 12px; }
   .native-grid { grid-template-columns: 1fr; }
-  .word { align-items: flex-start; flex-direction: column; gap: 5px; }
+  .word { align-items: flex-start; flex-direction: column; gap: 2px; }
+  .kanji-card:not(.edit-card) .word::after { display: none; }
   .meaning { text-align: left; }
+  .meaning-sense { justify-content: flex-start; }
 }

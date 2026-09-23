@@ -199,6 +199,49 @@ class NoteTypeTest(unittest.TestCase):
         self.assertIn("flex-wrap: wrap", rules[".example-spell"])
         self.assertIn("flex-wrap: wrap", rules[".word"])
 
+    def test_the_card_sizes_itself_without_the_editor_shell(self) -> None:
+        """카드는 **스스로** ``box-sizing: border-box`` 를 진다.
+
+        카드는 ``width: 880px; max-width: 100%`` 에 큰 안쪽 여백을 준다.  편집기는
+        ``style.css`` 의 ``* { box-sizing: border-box }`` 아래에서 그리므로 멀쩡하지만
+        Anki 노트 타입에는 tokens.css + card.css 만 실린다 — 여백이 폭에 더해져 좁은
+        화면(AnkiDroid)에서 카드가 옆으로 넘쳤다(375px 에서 한자 409px, 토익 413px).
+        """
+        for name, spec in FOUND.items():
+            body = re.sub(r"/\*.*?\*/", "",
+                          (spec.static_dir / "card.css").read_text(encoding="utf-8"),
+                          flags=re.S)
+            root = f".{name}-card"
+            sized = False
+            for rule in body.split("}"):
+                selector, _, declarations = rule.partition("{")
+                parts = {part.strip() for part in selector.split(",")}
+                if root in parts and f"{root} *" in parts \
+                        and "box-sizing: border-box" in declarations:
+                    sized = True
+            with self.subTest(deck=name):
+                self.assertTrue(sized, f"{root} 와 그 자손이 border-box 를 스스로 정해야 한다")
+
+    def test_screen_reader_text_is_hidden_inside_the_card(self) -> None:
+        """카드가 싣는 ``.sr-only`` 는 카드 CSS 가 스스로 숨긴다.
+
+        원본에서는 이 규칙이 편집기 ``style.css`` 에만 있어서, Anki 의 한자 카드에
+        요미카타 갈래 이름(「コン 음독」)이 글자로 새어 나왔다.
+        """
+        for name, spec in FOUND.items():
+            if "sr-only" not in (spec.static_dir / "card.js").read_text(encoding="utf-8"):
+                continue
+            body = re.sub(r"/\*.*?\*/", "",
+                          (spec.static_dir / "card.css").read_text(encoding="utf-8"),
+                          flags=re.S)
+            rules = {selector.strip(): declarations
+                     for selector, _, declarations in
+                     (rule.partition("{") for rule in body.split("}"))}
+            rule = rules.get(f".{name}-card .sr-only", "")
+            with self.subTest(deck=name):
+                self.assertIn("clip", rule)
+                self.assertIn("position: absolute", rule)
+
     def test_the_toeic_switch_removes_the_example_rather_than_blanking_it(self) -> None:
         """예문 스위치는 **자리까지 걷어낸다.**
 
