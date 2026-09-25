@@ -6,6 +6,7 @@ Anki 카드가 프론트엔드와 어긋나지 않는 이유는 '똑같이 만�
 """
 from __future__ import annotations
 
+import json
 import re
 import sys
 import unittest
@@ -17,6 +18,9 @@ sys.path.insert(0, str(ROOT))
 from shared.anki import Anki  # noqa: E402
 from shared.ankicard import (  # noqa: E402
     DATA_FIELD,
+    THEME_ID,
+    THEME_JS,
+    THEME_KEY,
     TOKENS,
     build_note_type,
     envelope,
@@ -241,6 +245,42 @@ class NoteTypeTest(unittest.TestCase):
             with self.subTest(deck=name):
                 self.assertIn("clip", rule)
                 self.assertIn("position: absolute", rule)
+
+    def test_every_anki_face_carries_the_dark_mode_switch(self) -> None:
+        """다크 모드 스위치는 **모든 덱의 모든 면**에 있다.
+
+        스위치 하나가 모든 카드에 걸리므로, 어느 면에서 누르든 같은 값을 고친다.
+        한 면에라도 없으면 그 면에서는 되돌릴 길이 없다.
+        """
+        for name, _spec, note_type in note_types():
+            for template in note_type.templates:
+                for face in (template.front, template.back):
+                    with self.subTest(deck=name, card=template.name):
+                        self.assertIn(f'id="{THEME_ID}"', face)
+                        self.assertIn(json.dumps(THEME_KEY), face)
+
+    def test_the_chosen_theme_beats_anki_night_mode(self) -> None:
+        """고른 것이 이긴다 — 야간 모드에서 '다크 OFF' 를 고르면 밝아져야 한다.
+
+        그래서 다크 토큰은 ``sp-dark`` 에서도 켜지고, Anki 야간 모드에서는
+        ``sp-light`` 가 **없을 때만** 켜진다.  표식은 body 가 아니라 스위치 버튼에
+        달리므로(Anki 가 카드마다 body 의 class 를 다시 쓴다) ``:has()`` 로 찾는다.
+        """
+        body = re.sub(r"/\*.*?\*/", "", TOKENS.read_text(encoding="utf-8"), flags=re.S)
+        dark = [selector for selector, _, declarations in
+                (rule.partition("{") for rule in body.split("}"))
+                if "--paper" in declarations and ".sp-dark" in selector]
+        self.assertEqual(len(dark), 1, "다크 토큰 블록이 sp-dark 로도 켜져야 한다")
+        parts = {part.strip() for part in dark[0].split(",")}
+        self.assertEqual(parts, {".nightMode:not(:has(.sp-light))",
+                                 ".night_mode:not(:has(.sp-light))",
+                                 ":root:has(.sp-dark)"})
+
+    def test_the_theme_mark_never_rides_on_the_body(self) -> None:
+        """Anki 는 카드를 넘길 때마다 body 의 class 를 다시 쓴다.  body 에 단 표식은
+        다음 카드에서 지워져 다크가 풀린다 — 그것이 첫 판의 결함이었다."""
+        self.assertNotIn("body.classList.add", THEME_JS)
+        self.assertNotIn("body.className", THEME_JS)
 
     def test_the_toeic_switch_removes_the_example_rather_than_blanking_it(self) -> None:
         """예문 스위치는 **자리까지 걷어낸다.**

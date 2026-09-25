@@ -68,11 +68,19 @@
   --press: transform 120ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
-/* Anki 야간 모드.  Anki 가 카드 몸체에 nightMode(데스크톱)·night_mode(AnkiDroid)를
- * 붙인다.  카드 CSS 는 색을 전부 토큰으로 읽으므로 여기서 값만 뒤집는다.
- * 편집기에는 이 클래스가 없으므로 셸은 언제나 주간이다. */
-.nightMode,
-.night_mode {
+/* 다크 모드.  두 길로 켜진다.
+ *   1. Anki 야간 모드 — Anki 가 카드 몸체에 nightMode(데스크톱)·night_mode(AnkiDroid)를
+ *      붙인다.
+ *   2. 카드 위의 다크 모드 스위치 — 사람이 고르면 스위치 버튼에 sp-dark / sp-light 가
+ *      붙는다(shared/ankicard.py 의 THEME_JS).  페이지는 :has() 로 그 표식을 찾는다 —
+ *      body 에 달면 Anki 가 카드마다 body 의 class 를 다시 써서 지운다.
+ *      **고른 것이 이긴다** — 야간 모드에서 '다크 OFF' 를 고르면 sp-light 가 첫 길을
+ *      막는다(:not).
+ * 카드 CSS 는 색을 전부 토큰으로 읽으므로 여기서 값만 뒤집는다.
+ * 편집기에는 이 클래스들이 없으므로 셸은 언제나 주간이다. */
+.nightMode:not(:has(.sp-light)),
+.night_mode:not(:has(.sp-light)),
+:root:has(.sp-dark) {
   --paper: #1A1917;
   --surface: #22211E;
   --sunken: #1D1C1A;

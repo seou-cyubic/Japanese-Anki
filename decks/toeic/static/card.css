@@ -414,6 +414,9 @@
   color: var(--surface);
 }
 .toeic-card.examples-on .tc-switch::before { border-color: var(--surface); background: var(--surface); }
+/* 켜진 쪽에도 손을 올리면 한 단계 짙어진다 — 꺼진 쪽만 반응하면 켜진 스위치는
+ * 누를 수 없는 것처럼 보인다.  Anki 의 다크 모드 스위치와 같은 규칙이다. */
+.toeic-card.examples-on .tc-switch:hover { border-color: var(--ink-2); background: var(--ink-2); }
 
 /* ── 좁은 화면 ─────────────────────────────────────────────────────── */
 @media (max-width: 1050px) {

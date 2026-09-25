@@ -896,6 +896,149 @@ process.stdout.write(`anki faces: ${Object.values(faces)
 `);
 
 process.stdout.write('anki writing pad: a stroke reaches the back, the front always starts blank\n');
+
+/* 다크 모드 스위치 — 누르면 **다음 카드도** 어두워지는가.
+ *
+ * Anki 는 카드를 넘길 때마다 스크립트를 처음부터 다시 돌리고, **그 뒤에 body 의 class
+ * 를 통째로 다시 쓴다**(`card card1 nightMode`).  그래서 고른 값은 저장소에 남아야
+ * 하고, 페이지를 어둡게 하는 표식은 body 가 아니라 Anki 가 손대지 않는 **스위치 버튼**
+ * 에 달려야 한다(tokens.css 가 `:root:has(.sp-dark)` 로 찾는다).  body 에 달던 첫 판은
+ * 다음 카드에서 다크가 풀렸다 — 여기서는 카드마다 Anki 처럼 body 를 다시 써서 그것을
+ * 잡는다. */
+function themePage(nightMode) {
+  const base = ['card', ...(nightMode ? ['nightMode'] : [])];
+  const names = new Set(base);
+  const body = {
+    classList: {
+      add: (...list) => list.forEach((name) => names.add(name)),
+      remove: (...list) => list.forEach((name) => names.delete(name)),
+      contains: (name) => names.has(name)
+    }
+  };
+  const slots = new Map();
+  const window = {
+    localStorage: {
+      getItem: (key) => (slots.has(key) ? slots.get(key) : null),
+      setItem: (key, value) => slots.set(key, String(value))
+    }
+  };
+  /* Anki 가 카드를 그린 뒤에 하는 일 — body 의 class 를 제 것으로 되돌린다. */
+  const ankiRewritesBody = () => { names.clear(); base.forEach((name) => names.add(name)); };
+  return { body, names, window, ankiRewritesBody };
+}
+
+function themeFace(page, html, data) {
+  const mount = new MountElement('div');
+  const carrier = new FakeElement('div');
+  carrier.textContent = data;
+  const button = new FakeElement('button');
+  button.className = 'sp-theme';
+  const sandbox = {
+    window: page.window,
+    document: {
+      body: page.body,
+      getElementById: (id) => (id === 'sp-mount' ? mount
+        : id === 'sp-data' ? carrier : id === 'sp-theme' ? button : null),
+      createElement: (tag) => new MountElement(tag),
+      createDocumentFragment: () => new FakeFragment(),
+      createTextNode: (text) => {
+        const node = new FakeElement('#text');
+        node.textContent = text;
+        return node;
+      }
+    },
+    atob: (value) => Buffer.from(value, 'base64').toString('binary'),
+    Uint8Array,
+    TextDecoder,
+    JSON
+  };
+  const context = vm.createContext(sandbox);
+  for (const code of [...html.matchAll(/<script>([\s\S]*?)<[/]script>/g)].map((m) => m[1])) {
+    vm.runInContext(code, context, { filename: 'theme face' });
+  }
+  page.ankiRewritesBody();
+  if (mount.children.length !== 1) throw new Error('the switch must not take the card\'s place');
+  return button;
+}
+
+/* 페이지가 무엇으로 칠해지는가 — tokens.css 가 읽는 그대로 센다. */
+const pageTheme = (page, button) => {
+  if (hasClass(button, 'sp-dark')) return 'dark';
+  if (hasClass(button, 'sp-light')) return 'light';
+  return page.names.has('nightMode') ? 'dark' : 'light';
+};
+
+for (const [deck, deckFaces] of Object.entries(faces)) {
+  for (const html of Object.values(deckFaces.templates)) {
+    if (!html.includes('id="sp-theme"')) {
+      throw new Error(`${deck}: every Anki face must carry the dark mode switch`);
+    }
+  }
+}
+
+const toeicFaces = faces['SP 토익'];
+const bunpoFaces = faces['SP 문법'];
+
+// 고른 것이 없으면 Anki 를 따른다 — 주간이면 OFF, 야간이면 ON.
+const dayPage = themePage(false);
+let themeButton = themeFace(dayPage, toeicFaces.templates['뜻 앞면'], toeicFaces.data);
+if (themeButton.attributes['aria-pressed'] !== 'false' || themeButton.textContent !== '다크 OFF') {
+  throw new Error('with nothing chosen, a day-mode Anki must start light');
+}
+if (hasClass(themeButton, 'sp-dark') || hasClass(themeButton, 'sp-light')) {
+  throw new Error('with nothing chosen, the switch must leave Anki in charge');
+}
+const nightPage = themePage(true);
+if (themeFace(nightPage, toeicFaces.templates['뜻 앞면'], toeicFaces.data)
+  .attributes['aria-pressed'] !== 'true') {
+  throw new Error('with nothing chosen, Anki night mode must show as dark');
+}
+
+// 누르면 어두워지고, **다른 덱의 다음 카드**도 — Anki 가 body 를 다시 쓴 뒤에도 —
+// 어두운 채로 시작한다.
+themeButton.onclick({ stopPropagation() {} });
+if (pageTheme(dayPage, themeButton) !== 'dark' || themeButton.textContent !== '다크 ON') {
+  throw new Error('pressing the switch must turn the page dark');
+}
+themeButton = themeFace(dayPage, bunpoFaces.templates['뜻 뒷면'], bunpoFaces.next);
+if (pageTheme(dayPage, themeButton) !== 'dark'
+    || themeButton.attributes['aria-pressed'] !== 'true') {
+  throw new Error('the dark choice must carry to the next card, in every deck');
+}
+themeButton = themeFace(dayPage, kanjiFaces.templates['쓰기 앞면'], kanjiFaces.next);
+if (pageTheme(dayPage, themeButton) !== 'dark') {
+  throw new Error('the dark choice must survive Anki rewriting the body class');
+}
+
+// 다시 누르면 밝아진다 — Anki 가 야간 모드여도 고른 것이 이긴다.
+themeButton.onclick({ stopPropagation() {} });
+if (pageTheme(dayPage, themeButton) !== 'light' || !hasClass(themeButton, 'sp-light')) {
+  throw new Error('pressing again must turn the page light');
+}
+const chosenLight = themePage(true);
+chosenLight.window.localStorage.setItem('sp-theme', 'light');
+const lightButton = themeFace(chosenLight, kanjiFaces.templates['읽기 앞면'], kanjiFaces.data);
+if (pageTheme(chosenLight, lightButton) !== 'light') {
+  throw new Error('a light choice must override Anki night mode');
+}
+
+// 저장소가 전부 막혀도 카드는 그려지고, 스위치는 이 화면 안에서 듣는다.
+const lockedPage = themePage(false);
+lockedPage.window = {
+  get localStorage() { throw new Error('blocked'); },
+  get sessionStorage() { throw new Error('blocked'); }
+};
+const lockedButton = themeFace(lockedPage, toeicFaces.templates['철자 앞면'], toeicFaces.data);
+lockedButton.onclick({ stopPropagation() {} });
+if (pageTheme(lockedPage, lockedButton) !== 'dark') {
+  throw new Error('with storage blocked, the switch must still work on this screen');
+}
+if (pageTheme(lockedPage, themeFace(lockedPage, toeicFaces.templates['철자 뒷면'],
+  toeicFaces.data)) !== 'dark') {
+  throw new Error('with storage blocked, the choice must still reach the next face');
+}
+
+process.stdout.write('anki dark mode: one press carries to the next card of every deck, survives Anki rewriting the body, beats night mode\n');
 /* --------------------------------------------------------------------------
  * 토익 렌더러 — 낱말 하나와 그 뜻들이 카드 한 장이다.
  * -------------------------------------------------------------------------- */

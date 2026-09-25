@@ -12,7 +12,7 @@ decks/<덱>/data/*.json  ──┬─→  편집기: /api/<덱>/record/<키>  �
 ```
 
 같은 ``card.js`` 와 같은 ``card.css`` 가 양쪽을 그리므로 **디자인이 어긋날 자리가
-없다.**  Anki 쪽에만 있는 것은 노트 타입 껍데기(``.card`` 바탕색)와, 카드 면을
+없다.**  Anki 쪽에만 있는 것은 노트 타입 껍데기(``.card`` 바탕색과 다크 모드 스위치)와, 카드 면을
 고르는 모드 클래스 하나뿐이다.
 
 ``Data`` 는 **base64** 로 싣는다.  세 가지를 한 번에 해결한다.
@@ -35,6 +35,8 @@ TOKENS = APP_STATIC / "tokens.css"
 DATA_FIELD = "Data"
 MOUNT_ID = "sp-mount"
 DATA_ID = "sp-data"
+THEME_ID = "sp-theme"
+THEME_KEY = "sp-theme"
 
 # Anki 노트 타입 껍데기.  카드 자체의 디자인은 덱의 card.css 가 전부 낸다.
 SHELL_CSS = """
@@ -49,6 +51,54 @@ SHELL_CSS = """
 .sp-mount { display: flex; justify-content: center; padding: 4px; }
 /* 편집기에서만 뜻이 있는 것들 — Anki 에서는 눌러도 뒤집히지 않는다. */
 .sp-mount .preview-card { cursor: default; }
+
+/* 다크 모드 스위치가 고른 종이.  Anki 자체의 야간 모드 규칙(.nightMode.card …)보다
+ * 무거우므로 이긴다 — 야간 모드에서 '다크 OFF' 를 골라도 밝아진다. */
+.card:has(.sp-dark),
+.card:has(.sp-light) {
+  background: var(--paper);
+  color: var(--ink);
+}
+
+/* 다크 모드 스위치 — 카드 위, 오른쪽 끝에 제 줄을 차지하고 앉는다.  화면에 띄워 두면
+ * (position: fixed) 넓은 한자 카드의 머리(「앞면」 표지)를 덮는다. */
+.sp-theme {
+  display: flex;
+  width: fit-content;
+  margin: 0 4px 6px auto;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 11px 5px 9px;
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--ink-3);
+  font-family: var(--kr);
+  font-size: 11.5px;
+  font-weight: 500;
+  line-height: 1.3;
+  cursor: pointer;
+}
+/* 반쯤 칠한 동그라미 — 밝음과 어두움 사이의 스위치. */
+.sp-theme::before {
+  content: "";
+  width: 9px;
+  height: 9px;
+  border: 1.5px solid currentColor;
+  border-radius: 50%;
+  background: linear-gradient(90deg, currentColor 0 50%, transparent 50%);
+  box-sizing: border-box;
+}
+.sp-theme:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.sp-theme[aria-pressed="true"] {
+  border-color: var(--ink);
+  background: var(--ink);
+  color: var(--surface);
+}
+/* 손을 올리면 켜짐·꺼짐 **어느 쪽이든** 한 단계 짙어진다 — 누를 수 있다는 표시가
+ * 상태에 따라 있다 없다 하지 않게. */
+.sp-theme[aria-pressed="false"]:hover { border-color: var(--ink-4); color: var(--ink); }
+.sp-theme[aria-pressed="true"]:hover { border-color: var(--ink-2); background: var(--ink-2); }
 """
 
 # 카드 면을 그리는 스크립트.  ``Data`` 를 풀어 화면과 **같은 렌더러**에 넘긴다.
@@ -65,6 +115,77 @@ MOUNT_JS = r"""
   if (!renderer) return;
   host.textContent = '';
   host.appendChild(renderer.render(renderer.noteFrom(envelope), %(options)s));
+})();
+"""
+
+# 다크 모드 켜고 끄기 — 토익 덱의 예문 스위치와 같은 방법이다.
+#
+# **스위치 하나가 모든 덱·모든 카드에 걸린다.**  Anki 는 카드를 넘길 때마다 스크립트를
+# 처음부터 다시 돌리므로 고른 값은 스크립트 바깥에 남긴다.  저장소는 사다리다 —
+# localStorage(앱을 닫아도 남는다) → sessionStorage(이번 실행 동안) → window(이 화면
+# 동안).  막힌 칸은 건너뛰고, 전부 막혀도 카드는 그려진다.
+#
+# 고른 것이 없으면 **Anki 의 야간 모드를 따른다**(body 의 nightMode·night_mode).
+# 고르면 **스위치 버튼 자신**에 sp-dark / sp-light 를 붙이고, tokens.css 가
+# `:root:has(.sp-dark)` 처럼 그 표식을 찾아 페이지 전체의 토큰을 뒤집는다.  카드
+# CSS 는 색을 전부 토큰으로 읽으므로 카드 쪽은 손댈 것이 없다.
+#
+# **표식을 body 에 달면 안 된다.**  Anki 는 카드를 넘길 때마다 body 의 class 를
+# 통째로 다시 쓰고(`card card1 nightMode` …) 그 일을 이 스크립트가 돈 **뒤에** 한다.
+# body 에 단 sp-dark 는 다음 카드에서 지워져 다크가 풀렸다.  버튼은 이 템플릿의
+# 마크업이라 Anki 가 손대지 않는다 — 토익 예문 스위치가 제 카드 요소에 class 를
+# 다는 것과 같은 이유다.
+#
+# 다크 모드는 카드가 아니라 **카드를 얹는 종이**의 일이라 Anki 껍데기가 맡는다.
+# 편집기에는 이 스위치가 없다 — 편집기 셸은 언제나 주간이다.
+THEME_JS = r"""
+(function () {
+  var KEY = %(key)s;
+  var body = document.body;
+  var button = document.getElementById(%(theme)s);
+  var stores = [];
+  try { if (window.localStorage) stores.push(window.localStorage); } catch (e) { /* 막혀 있다 */ }
+  try { if (window.sessionStorage) stores.push(window.sessionStorage); } catch (e) { /* 막혀 있다 */ }
+  var valid = function (value) { return value === 'dark' || value === 'light'; };
+  function kept() {
+    for (var i = 0; i < stores.length; i++) {
+      try { var value = stores[i].getItem(KEY); if (valid(value)) return value; } catch (e) { /* 다음 칸 */ }
+    }
+    return valid(window.__spTheme) ? window.__spTheme : null;
+  }
+  function keep(value) {
+    window.__spTheme = value;          /* 저장소가 전부 막혀도 이 화면에서는 듣는다 */
+    for (var i = 0; i < stores.length; i++) {
+      try { stores[i].setItem(KEY, value); } catch (e) { /* 다음 칸 */ }
+    }
+  }
+  function ankiNight() {
+    var list = body && body.classList;
+    return !!list && (list.contains('nightMode') || list.contains('night_mode'));
+  }
+  function paint(value) {
+    var dark = value ? value === 'dark' : ankiNight();
+    if (button) {
+      button.className = 'sp-theme' + (value ? ' sp-' + value : '');
+      button.textContent = dark ? '다크 ON' : '다크 OFF';
+      button.setAttribute('aria-pressed', dark ? 'true' : 'false');
+    }
+    return dark;
+  }
+  if (!button) return;
+  var dark = paint(kept());
+  /* 고른 것이 없을 때의 표시는 Anki 의 야간 표식을 읽는다.  그 표식은 이 스크립트가
+   * 돈 뒤에 붙을 수 있으므로 한 박자 뒤에 한 번 더 읽는다. */
+  if (typeof setTimeout === 'function') {
+    setTimeout(function () { if (!kept()) dark = paint(null); }, 0);
+  }
+  button.onclick = function (event) {
+    if (event && event.stopPropagation) event.stopPropagation();
+    dark = !dark;
+    var value = dark ? 'dark' : 'light';
+    keep(value);
+    paint(value);
+  };
 })();
 """
 
@@ -110,13 +231,18 @@ def styling(static_dir: Path) -> str:
 
 def face(renderer: str, mode: str, script: str, options: dict) -> str:
     """카드 한 면.  데이터를 싣고, 렌더러를 싣고, 모드 하나로 그린다."""
-    mount = (f'<div class="sp-mount" id="{MOUNT_ID}"></div>'
+    mount = (f'<button type="button" class="sp-theme" id="{THEME_ID}"'
+             f' aria-pressed="false">다크</button>'
+             f'<div class="sp-mount" id="{MOUNT_ID}"></div>'
              f'<div id="{DATA_ID}" hidden>{{{{text:{DATA_FIELD}}}}}</div>')
     setup = MOUNT_JS % {
         "mount": json.dumps(MOUNT_ID),
         "data": json.dumps(DATA_ID),
         "renderer": json.dumps(renderer),
         "options": json.dumps({**options, "mode": mode}, ensure_ascii=False),
+    } + THEME_JS % {
+        "key": json.dumps(THEME_KEY),
+        "theme": json.dumps(THEME_ID),
     }
     return (mount
             + "\n<script>\n" + script + "\n</script>\n"
